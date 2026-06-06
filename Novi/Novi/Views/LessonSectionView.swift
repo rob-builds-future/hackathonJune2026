@@ -33,18 +33,24 @@ struct LessonSectionView<Content: View>: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Spacing.small)
-        .background(DesignColors.surfaceElevated, in: RoundedRectangle(cornerRadius: CornerRadius.small))
+        .background(DesignColors.cardGradient, in: RoundedRectangle(cornerRadius: CornerRadius.medium))
         .overlay(alignment: .leading) {
             RoundedRectangle(cornerRadius: 2)
-                .fill(accent.opacity(0.75))
-                .frame(width: 3)
+                .fill(
+                    LinearGradient(
+                        colors: [accent, DesignColors.brandCoral.opacity(0.75)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: 4)
                 .padding(.vertical, Spacing.small)
         }
         .overlay(
-            RoundedRectangle(cornerRadius: CornerRadius.small)
-                .stroke(DesignColors.separator, lineWidth: 1)
+            RoundedRectangle(cornerRadius: CornerRadius.medium)
+                .stroke(DesignColors.glassStroke, lineWidth: 1)
         )
-        .shadow(color: DesignColors.shadow, radius: 8, x: 0, y: 3)
+        .shadow(color: DesignColors.shadow, radius: 14, x: 0, y: 8)
     }
 }
 

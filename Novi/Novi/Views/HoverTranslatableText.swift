@@ -2,227 +2,395 @@
 //  HoverTranslatableText.swift
 //  Novi
 //
-//  Renders text as individually hoverable words. Hovering a word shows its
-//  meaning in a popover, using known vocabulary first and Novi's own
-//  LibreTranslate instance for everything else.
+//  Renders translated text as one AppKit text view. Clicking a word shows its
+//  meaning in one lightweight popover, using known vocabulary first and Novi's
+//  configured translation backend for everything else.
 //
 
+import AppKit
 import SwiftUI
 
-/// A read-only text view whose words can be hovered to reveal their meaning.
+/// A read-only text view whose words can be clicked to reveal their meaning.
 ///
 /// - `text` is shown to the user (in `wordsLanguage`).
-/// - Hovering a word translates it into `explanationLanguage` on demand via the
+/// - Clicking a word translates it into `explanationLanguage` on demand via the
 ///   `translationService` and caches the result.
 /// - `glossary` provides instant, offline lookups (e.g. the lesson's vocabulary).
 struct HoverTranslatableText: View {
     let text: String
     /// BCP-47 code of the language `text` is written in.
     let wordsLanguage: String
-    /// BCP-47 code of the language hovered words are translated into.
+    /// BCP-47 code of the language clicked words are translated into.
     let explanationLanguage: String
     /// Instant lookups keyed by lowercased word.
     var glossary: [String: String] = [:]
-    /// Translation backend (Novi's own LibreTranslate by default).
+    /// Translation backend (DeepL when configured, LibreTranslate fallback).
     var translationService: any TranslationService = TranslationServiceFactory.makeDefault()
 
-    @State private var cache: [String: String] = [:]
-    @State private var failed: Set<String> = []
-    @State private var inFlight: Set<String> = []
-
-    private var tokens: [TextToken] { TextToken.tokens(from: text) }
-
-    private var languagesValid: Bool {
-        !wordsLanguage.isEmpty && !explanationLanguage.isEmpty
-            && explanationLanguage != "auto" && wordsLanguage != explanationLanguage
-    }
-
     var body: some View {
-        FlowLayout(spacing: 0, lineSpacing: 5) {
-            ForEach(tokens) { token in
-                if let word = token.word {
-                    HoverWord(
-                        word: word,
-                        display: token.display,
-                        meaning: meaning(for: word),
-                        isUnavailable: failed.contains(word.lowercased()),
-                        onHover: { requestTranslation(word) }
-                    )
-                } else {
-                    Text(token.display)
-                        .foregroundStyle(DesignColors.textPrimary)
-                }
-            }
-        }
-    }
-
-    private func meaning(for word: String) -> String? {
-        let key = word.lowercased()
-        return glossary[key] ?? cache[key]
-    }
-
-    /// Translates a single word on demand and caches the result.
-    private func requestTranslation(_ word: String) {
-        let key = word.lowercased()
-        guard meaning(for: word) == nil, !inFlight.contains(key), !failed.contains(key) else { return }
-        guard languagesValid else { failed.insert(key); return }
-
-        inFlight.insert(key)
-        let service = translationService
-        let from = wordsLanguage
-        let to = explanationLanguage
-
-        Task {
-            let result = try? await service.translate(key, from: from, to: to)
-            let translated = result?.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            await MainActor.run {
-                inFlight.remove(key)
-                if let translated, !translated.isEmpty {
-                    cache[key] = translated
-                } else {
-                    failed.insert(key)
-                }
-            }
-        }
+        ClickTranslatableTextView(
+            text: text,
+            wordsLanguage: wordsLanguage,
+            explanationLanguage: explanationLanguage,
+            glossary: glossary,
+            translationService: translationService
+        )
     }
 }
 
-// MARK: - Word view
+// MARK: - AppKit text renderer
 
-/// A single hoverable word; highlights on hover and shows its meaning in a
-/// popover info window.
-private struct HoverWord: View {
-    let word: String
-    let display: String
-    let meaning: String?
-    /// True when translation was attempted but produced no result.
-    let isUnavailable: Bool
-    /// Called when the pointer enters the word (triggers translation).
-    let onHover: () -> Void
+private struct ClickTranslatableTextView: NSViewRepresentable {
+    let text: String
+    let wordsLanguage: String
+    let explanationLanguage: String
+    let glossary: [String: String]
+    let translationService: any TranslationService
 
-    @State private var isHovered = false
+    func makeCoordinator() -> Coordinator {
+        Coordinator(
+            wordsLanguage: wordsLanguage,
+            explanationLanguage: explanationLanguage,
+            glossary: glossary,
+            translationService: translationService
+        )
+    }
 
-    var body: some View {
-        Text(display)
-            .padding(.horizontal, 1)
-            .background(
-                isHovered ? DesignColors.accentPrimary.opacity(0.18) : .clear,
-                in: RoundedRectangle(cornerRadius: 3)
-            )
-            .onHover { hovering in
-                isHovered = hovering
-                if hovering { onHover() }
+    func makeNSView(context: Context) -> ClickableWrappingTextView {
+        let view = ClickableWrappingTextView()
+        view.onWordClick = { [weak coordinator = context.coordinator] word, rect, sourceView in
+            coordinator?.showMeaning(for: word, anchorRect: rect, in: sourceView)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: ClickableWrappingTextView, context: Context) {
+        context.coordinator.update(
+            wordsLanguage: wordsLanguage,
+            explanationLanguage: explanationLanguage,
+            glossary: glossary,
+            translationService: translationService
+        )
+        nsView.update(text: text)
+    }
+
+    final class Coordinator: NSObject {
+        private var wordsLanguage: String
+        private var explanationLanguage: String
+        private var glossary: [String: String]
+        private var translationService: any TranslationService
+
+        private var cache: [String: String] = [:]
+        private var failed: Set<String> = []
+        private var inFlight: Set<String> = []
+        private var selectedWord: String?
+        private var selectedAnchorRect: NSRect?
+        private weak var selectedSourceView: NSView?
+        private var popover: NSPopover?
+
+        init(
+            wordsLanguage: String,
+            explanationLanguage: String,
+            glossary: [String: String],
+            translationService: any TranslationService
+        ) {
+            self.wordsLanguage = wordsLanguage
+            self.explanationLanguage = explanationLanguage
+            self.glossary = glossary
+            self.translationService = translationService
+        }
+
+        func update(
+            wordsLanguage: String,
+            explanationLanguage: String,
+            glossary: [String: String],
+            translationService: any TranslationService
+        ) {
+            let languageChanged = self.wordsLanguage != wordsLanguage
+                || self.explanationLanguage != explanationLanguage
+            self.wordsLanguage = wordsLanguage
+            self.explanationLanguage = explanationLanguage
+            self.glossary = glossary
+            self.translationService = translationService
+            if languageChanged {
+                cache.removeAll()
+                failed.removeAll()
+                inFlight.removeAll()
+                closePopover()
             }
-            .popover(isPresented: $isHovered, arrowEdge: .bottom) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(word)
-                        .font(.headline)
-                    if let meaning, !meaning.isEmpty {
-                        Text(meaning)
-                            .foregroundStyle(DesignColors.textSecondary)
-                            .textSelection(.enabled)
-                    } else if isUnavailable {
-                        Text("No translation available")
-                            .font(.callout)
-                            .foregroundStyle(DesignColors.textSecondary)
+        }
+
+        func showMeaning(for word: String, anchorRect: NSRect, in sourceView: NSView) {
+            let key = word.lowercased()
+            selectedWord = word
+            selectedAnchorRect = anchorRect
+            selectedSourceView = sourceView
+
+            showPopover(word: word, meaning: meaning(for: key), isUnavailable: failed.contains(key), inFlight: inFlight.contains(key))
+
+            guard meaning(for: key) == nil, !inFlight.contains(key), !failed.contains(key) else { return }
+            guard languagesValid else {
+                failed.insert(key)
+                showPopover(word: word, meaning: nil, isUnavailable: true, inFlight: false)
+                return
+            }
+
+            inFlight.insert(key)
+            showPopover(word: word, meaning: nil, isUnavailable: false, inFlight: true)
+
+            let service = translationService
+            let from = wordsLanguage
+            let to = explanationLanguage
+
+            Task {
+                let result = try? await service.translate(key, from: from, to: to)
+                let translated = result?.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                await MainActor.run {
+                    self.inFlight.remove(key)
+                    if let translated, !translated.isEmpty {
+                        self.cache[key] = translated
                     } else {
-                        HStack(spacing: 6) {
-                            ProgressView().controlSize(.small)
-                            Text("Translating…").foregroundStyle(DesignColors.textSecondary)
-                        }
+                        self.failed.insert(key)
                     }
+                    guard self.selectedWord?.lowercased() == key else { return }
+                    self.showPopover(
+                        word: word,
+                        meaning: self.meaning(for: key),
+                        isUnavailable: self.failed.contains(key),
+                        inFlight: false
+                    )
                 }
-                .padding(12)
-                .frame(minWidth: 130, alignment: .leading)
-                .background(DesignColors.surfacePrimary)
             }
-    }
-}
-
-// MARK: - Tokenizer
-
-/// A run of characters from the source text: either a `word` (letters/digits)
-/// or a separator (spaces, punctuation) where `word` is nil.
-struct TextToken: Identifiable {
-    let id: Int
-    let display: String
-    let word: String?
-
-    static func tokens(from text: String) -> [TextToken] {
-        var tokens: [TextToken] = []
-        var current = ""
-        var currentIsWord = false
-        var id = 0
-
-        func flush() {
-            guard !current.isEmpty else { return }
-            tokens.append(TextToken(id: id, display: current, word: currentIsWord ? current : nil))
-            id += 1
-            current = ""
         }
 
-        for character in text {
-            let isWordCharacter = character.isLetter || character.isNumber
-            if current.isEmpty {
-                current.append(character)
-                currentIsWord = isWordCharacter
-            } else if isWordCharacter == currentIsWord {
-                current.append(character)
+        private var languagesValid: Bool {
+            !wordsLanguage.isEmpty && !explanationLanguage.isEmpty
+                && explanationLanguage != "auto" && wordsLanguage != explanationLanguage
+        }
+
+        private func meaning(for key: String) -> String? {
+            glossary[key] ?? cache[key]
+        }
+
+        private func showPopover(word: String, meaning: String?, isUnavailable: Bool, inFlight: Bool) {
+            guard let selectedAnchorRect, let selectedSourceView else { return }
+
+            let content = WordMeaningPopoverContent(
+                word: word,
+                meaning: meaning,
+                isUnavailable: isUnavailable,
+                inFlight: inFlight
+            )
+            .padding(12)
+
+            let controller = NSHostingController(rootView: content)
+            controller.sizingOptions = [.intrinsicContentSize]
+
+            if popover == nil {
+                let popover = NSPopover()
+                popover.behavior = .transient
+                popover.animates = false
+                self.popover = popover
+            }
+
+            popover?.contentViewController = controller
+            if popover?.isShown == true {
+                popover?.positioningRect = selectedAnchorRect
             } else {
-                flush()
-                current.append(character)
-                currentIsWord = isWordCharacter
+                popover?.show(relativeTo: selectedAnchorRect, of: selectedSourceView, preferredEdge: .maxY)
             }
         }
-        flush()
-        return tokens
+
+        private func closePopover() {
+            popover?.close()
+            popover = nil
+            selectedWord = nil
+            selectedAnchorRect = nil
+            selectedSourceView = nil
+        }
     }
 }
 
-// MARK: - Flow layout
+private final class ClickableWrappingTextView: NSView {
+    var onWordClick: ((String, NSRect, NSView) -> Void)?
 
-/// A simple left-to-right wrapping layout for the word views.
-struct FlowLayout: Layout {
-    var spacing: CGFloat = 4
-    var lineSpacing: CGFloat = 4
+    private let textView = NSTextView()
+    private var heightConstraint: NSLayoutConstraint?
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let maxWidth = proposal.width ?? .infinity
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        var lineHeight: CGFloat = 0
-        var widest: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x + size.width > maxWidth, x > 0 {
-                x = 0
-                y += lineHeight + lineSpacing
-                lineHeight = 0
-            }
-            x += size.width + spacing
-            lineHeight = max(lineHeight, size.height)
-            widest = max(widest, x)
-        }
-        let width = maxWidth.isFinite ? maxWidth : widest
-        return CGSize(width: width, height: y + lineHeight)
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setup()
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX
-        var y = bounds.minY
-        var lineHeight: CGFloat = 0
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setup()
+    }
 
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x + size.width > bounds.maxX, x > bounds.minX {
-                x = bounds.minX
-                y += lineHeight + lineSpacing
-                lineHeight = 0
-            }
-            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-            x += size.width + spacing
-            lineHeight = max(lineHeight, size.height)
+    override var isFlipped: Bool { true }
+
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: NSView.noIntrinsicMetric, height: heightConstraint?.constant ?? 20)
+    }
+
+    override func layout() {
+        super.layout()
+        textView.textContainer?.containerSize = CGSize(width: bounds.width, height: .greatestFiniteMagnitude)
+        textView.textContainer?.widthTracksTextView = true
+        updateHeight()
+    }
+
+    func update(text: String) {
+        if textView.string != text {
+            textView.string = text
         }
+        applyTextStyle()
+        updateHeight()
+    }
+
+    private func setup() {
+        translatesAutoresizingMaskIntoConstraints = false
+        textView.translatesAutoresizingMaskIntoConstraints = false
+        textView.isEditable = false
+        textView.isSelectable = false
+        textView.isRichText = false
+        textView.drawsBackground = false
+        textView.textContainerInset = .zero
+        textView.textContainer?.lineFragmentPadding = 0
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.heightTracksTextView = false
+        textView.isHorizontallyResizable = false
+        textView.isVerticallyResizable = true
+        textView.autoresizingMask = [.width]
+        textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        addSubview(textView)
+        heightConstraint = heightAnchor.constraint(equalToConstant: 20)
+        heightConstraint?.isActive = true
+        NSLayoutConstraint.activate([
+            textView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            textView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            textView.topAnchor.constraint(equalTo: topAnchor),
+            textView.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+
+        let clickGesture = NSClickGestureRecognizer(target: self, action: #selector(handleClick(_:)))
+        textView.addGestureRecognizer(clickGesture)
+    }
+
+    private func applyTextStyle() {
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineSpacing = 3
+
+        let textColor = NSColor(named: "TextPrimary") ?? .labelColor
+        textView.font = NSFont.systemFont(ofSize: 15)
+        textView.textColor = textColor
+        textView.typingAttributes = [
+            .font: NSFont.systemFont(ofSize: 15),
+            .foregroundColor: textColor,
+            .paragraphStyle: paragraphStyle
+        ]
+        textView.textStorage?.setAttributes(textView.typingAttributes, range: NSRange(location: 0, length: textView.string.utf16.count))
+    }
+
+    private func updateHeight() {
+        guard bounds.width > 0,
+              let layoutManager = textView.layoutManager,
+              let textContainer = textView.textContainer else { return }
+        layoutManager.ensureLayout(for: textContainer)
+        let height = ceil(layoutManager.usedRect(for: textContainer).height)
+        heightConstraint?.constant = max(20, height)
+        invalidateIntrinsicContentSize()
+    }
+
+    @objc private func handleClick(_ recognizer: NSClickGestureRecognizer) {
+        guard recognizer.state == .ended,
+              let wordHit = word(at: recognizer.location(in: textView)) else { return }
+        onWordClick?(wordHit.word, wordHit.rect, textView)
+    }
+
+    private func word(at point: NSPoint) -> (word: String, rect: NSRect)? {
+        guard let layoutManager = textView.layoutManager,
+              let textContainer = textView.textContainer else { return nil }
+
+        let containerOrigin = textView.textContainerOrigin
+        let containerPoint = NSPoint(x: point.x - containerOrigin.x, y: point.y - containerOrigin.y)
+        let glyphIndex = layoutManager.glyphIndex(for: containerPoint, in: textContainer)
+        let characterIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
+        let nsString = textView.string as NSString
+        guard characterIndex < nsString.length else { return nil }
+
+        let wordRange = Self.wordRange(in: nsString, at: characterIndex)
+        guard wordRange.length > 0 else { return nil }
+
+        let glyphRange = layoutManager.glyphRange(forCharacterRange: wordRange, actualCharacterRange: nil)
+        var rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+        rect = rect.insetBy(dx: -2, dy: -2)
+        guard rect.insetBy(dx: -4, dy: -4).contains(containerPoint) else { return nil }
+        rect.origin.x += containerOrigin.x
+        rect.origin.y += containerOrigin.y
+
+        return (nsString.substring(with: wordRange), rect)
+    }
+
+    private static func wordRange(in string: NSString, at index: Int) -> NSRange {
+        let wordCharacters = CharacterSet.letters.union(.decimalDigits)
+        guard index < string.length,
+              let scalar = UnicodeScalar(string.character(at: index)),
+              wordCharacters.contains(scalar) else {
+            return NSRange(location: index, length: 0)
+        }
+
+        var start = index
+        while start > 0,
+              let scalar = UnicodeScalar(string.character(at: start - 1)),
+              wordCharacters.contains(scalar) {
+            start -= 1
+        }
+
+        var end = index
+        while end < string.length,
+              let scalar = UnicodeScalar(string.character(at: end)),
+              wordCharacters.contains(scalar) {
+            end += 1
+        }
+
+        return NSRange(location: start, length: end - start)
+    }
+}
+
+private struct WordMeaningPopoverContent: View {
+    let word: String
+    let meaning: String?
+    let isUnavailable: Bool
+    let inFlight: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(word)
+                .font(Typography.caption.weight(.semibold))
+                .foregroundStyle(DesignColors.textPrimary)
+
+            if let meaning, !meaning.isEmpty {
+                Text(meaning)
+                    .font(Typography.caption)
+                    .foregroundStyle(DesignColors.textSecondary)
+            } else if isUnavailable {
+                Text("No translation available")
+                    .font(Typography.caption)
+                    .foregroundStyle(DesignColors.textSecondary)
+            } else if inFlight {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Translating...")
+                        .font(Typography.caption)
+                        .foregroundStyle(DesignColors.textSecondary)
+                }
+            }
+        }
+        .frame(minWidth: 130, alignment: .leading)
+        .fixedSize()
+        .background(DesignColors.surfaceElevated)
     }
 }

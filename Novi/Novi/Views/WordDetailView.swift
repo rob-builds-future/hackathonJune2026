@@ -9,6 +9,8 @@
 import SwiftUI
 
 struct WordDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+
     let word: WordRecord
     var onOpenEntry: (UUID) -> Void = { _ in }
 
@@ -19,6 +21,7 @@ struct WordDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.large) {
+                backButton
                 header
                 progressSection
                 statisticsSection
@@ -30,11 +33,26 @@ struct WordDetailView: View {
             .frame(maxWidth: 760, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .navigationTitle(word.term)
-        .background(DesignColors.backgroundPrimary)
+        .background(DesignColors.auroraBackground)
+        .toolbar(.hidden)
     }
 
     // MARK: - Header (highest emphasis)
+
+    private var backButton: some View {
+        Button {
+            dismiss()
+        } label: {
+            Label("Library", systemImage: "chevron.left")
+                .font(Typography.bodyEmphasized)
+                .foregroundStyle(DesignColors.textSecondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(DesignColors.cardGradient, in: Capsule())
+                .overlay(Capsule().stroke(DesignColors.glassStroke, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: Spacing.xSmall) {
@@ -47,6 +65,14 @@ struct WordDetailView: View {
                 .foregroundStyle(DesignColors.textSecondary)
                 .textSelection(.enabled)
         }
+        .padding(Spacing.large)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(DesignColors.memoryGradient, in: RoundedRectangle(cornerRadius: CornerRadius.large))
+        .overlay(
+            RoundedRectangle(cornerRadius: CornerRadius.large)
+                .stroke(DesignColors.glassStroke, lineWidth: 1)
+        )
+        .shadow(color: DesignColors.shadow, radius: 18, x: 0, y: 10)
     }
 
     // MARK: - Progress (medium emphasis)
@@ -96,7 +122,11 @@ struct WordDetailView: View {
                 .textSelection(.enabled)
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(DesignColors.surfaceInset, in: RoundedRectangle(cornerRadius: CornerRadius.small))
+                .background(DesignColors.cardGradient, in: RoundedRectangle(cornerRadius: CornerRadius.medium))
+                .overlay(
+                    RoundedRectangle(cornerRadius: CornerRadius.medium)
+                        .stroke(DesignColors.glassStroke, lineWidth: 1)
+                )
         }
     }
 
@@ -158,10 +188,10 @@ private struct StatTile: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Spacing.small)
-        .background(DesignColors.surfaceElevated, in: RoundedRectangle(cornerRadius: CornerRadius.small))
+        .background(DesignColors.cardGradient, in: RoundedRectangle(cornerRadius: CornerRadius.small))
         .overlay(
             RoundedRectangle(cornerRadius: CornerRadius.small)
-                .stroke(DesignColors.separator, lineWidth: 1)
+                .stroke(DesignColors.glassStroke, lineWidth: 1)
         )
     }
 }
@@ -192,10 +222,10 @@ private struct MemoryRow: View {
             }
             .padding(Spacing.small)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(DesignColors.surfaceElevated, in: RoundedRectangle(cornerRadius: CornerRadius.small))
+            .background(DesignColors.cardGradient, in: RoundedRectangle(cornerRadius: CornerRadius.small))
             .overlay(
                 RoundedRectangle(cornerRadius: CornerRadius.small)
-                    .stroke(DesignColors.separator, lineWidth: 1)
+                    .stroke(DesignColors.glassStroke, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)

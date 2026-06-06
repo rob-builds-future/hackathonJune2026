@@ -27,7 +27,7 @@ struct EntryEditorView: View {
                 .frame(minWidth: 360, idealWidth: 480)
         }
         .frame(minWidth: 860, minHeight: 560)
-        .background(DesignColors.backgroundPrimary)
+        .background(DesignColors.auroraBackground)
         .onChange(of: entry.sourceText) { viewModel.handleTextEdit() }
         .onChange(of: entry.title) { viewModel.handleTitleEdit() }
         .onChange(of: entry.sourceLanguage) { viewModel.handleLanguageChange() }

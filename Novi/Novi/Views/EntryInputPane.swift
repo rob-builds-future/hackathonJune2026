@@ -31,25 +31,26 @@ struct EntryInputPane: View {
                 .font(Typography.body)
                 .foregroundStyle(DesignColors.textPrimary)
                 .scrollContentBackground(.hidden)
-                .background(DesignColors.surfaceInset)
+                .background(DesignColors.surfaceInset.opacity(0.72), in: RoundedRectangle(cornerRadius: CornerRadius.medium))
                 .frame(maxHeight: .infinity)
                 .padding(8)
                 .overlay(
-                    RoundedRectangle(cornerRadius: CornerRadius.small)
-                        .stroke(DesignColors.separator, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: CornerRadius.medium)
+                        .stroke(DesignColors.glassStroke, lineWidth: 1)
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: CornerRadius.small)
-                        .stroke(DesignColors.focusRing.opacity(0.18), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: CornerRadius.medium)
+                        .stroke(DesignColors.focusRing.opacity(0.26), lineWidth: 1)
                         .padding(2)
                 )
+                .shadow(color: DesignColors.shadow, radius: 14, x: 0, y: 8)
 
             languagePickers
         }
         .padding(.horizontal, Spacing.medium)
         .padding(.vertical, Spacing.large)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(DesignColors.backgroundPrimary)
+        .background(DesignColors.auroraBackground)
     }
 
     private var savedStatus: String {

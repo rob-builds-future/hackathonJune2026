@@ -34,18 +34,18 @@ struct WordLibraryView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                libraryHeader
                 filterBar
                 Divider().overlay(DesignColors.separator)
                 content
             }
-            .navigationTitle("Word Library")
-            .navigationSubtitle(subtitle)
-            .background(DesignColors.backgroundPrimary)
+            .background(DesignColors.auroraBackground)
             .navigationDestination(for: WordRecord.self) { word in
                 WordDetailView(word: word, onOpenEntry: onOpenEntry)
             }
         }
         .searchable(text: $search, prompt: "Search your words")
+        .toolbar(.hidden)
     }
 
     private var subtitle: String {
@@ -53,6 +53,43 @@ struct WordLibraryView: View {
     }
 
     // MARK: - Filters
+
+    private var libraryHeader: some View {
+        HStack(alignment: .center, spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(DesignColors.memoryGradient)
+                Image(systemName: "character.book.closed.fill")
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(DesignColors.brandGold)
+            }
+            .frame(width: 56, height: 56)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(DesignColors.glassStroke, lineWidth: 1)
+            )
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Word Library")
+                    .font(Typography.title)
+                    .foregroundStyle(DesignColors.textPrimary)
+                Text(subtitle.isEmpty ? "words collected from your life" : subtitle)
+                    .font(Typography.caption)
+                    .foregroundStyle(DesignColors.textMuted)
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, Spacing.medium)
+        .padding(.top, Spacing.medium)
+        .padding(.bottom, 12)
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(DesignColors.glassStroke)
+                .frame(height: 1)
+        }
+    }
 
     private var filterBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -69,7 +106,7 @@ struct WordLibraryView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
         }
-        .background(DesignColors.backgroundPrimary)
+        .background(.ultraThinMaterial)
     }
 
     // MARK: - Content
@@ -84,12 +121,12 @@ struct WordLibraryView: View {
             )
             .foregroundStyle(DesignColors.textSecondary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(DesignColors.backgroundPrimary)
+            .background(DesignColors.auroraBackground)
         } else if filtered.isEmpty {
             ContentUnavailableView.search(text: search)
                 .foregroundStyle(DesignColors.textSecondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(DesignColors.backgroundPrimary)
+                .background(DesignColors.auroraBackground)
         } else {
             ScrollView {
                 LazyVGrid(columns: columns, spacing: 16) {
@@ -102,7 +139,7 @@ struct WordLibraryView: View {
                 }
                 .padding(Spacing.medium)
             }
-            .background(DesignColors.backgroundPrimary)
+            .background(DesignColors.auroraBackground)
         }
     }
 }
@@ -141,17 +178,11 @@ private struct WordCard: View {
         }
         .padding(Spacing.small)
         .frame(height: 142, alignment: .topLeading)
-        .background(DesignColors.surfaceElevated, in: RoundedRectangle(cornerRadius: CornerRadius.medium))
-        .overlay(alignment: .top) {
-            RoundedRectangle(cornerRadius: 14)
-                .fill(word.learningStatus.color.opacity(0.65))
-                .frame(height: 4)
-                .padding(.horizontal, 10)
-        }
+        .background(DesignColors.cardGradient, in: RoundedRectangle(cornerRadius: CornerRadius.medium))
         .overlay(
-            RoundedRectangle(cornerRadius: CornerRadius.medium).stroke(DesignColors.separator, lineWidth: 1)
+            RoundedRectangle(cornerRadius: CornerRadius.medium).stroke(DesignColors.glassStroke, lineWidth: 1)
         )
-        .shadow(color: DesignColors.shadow, radius: 8, x: 0, y: 3)
+        .shadow(color: DesignColors.shadow, radius: 16, x: 0, y: 9)
     }
 }
 
@@ -171,7 +202,7 @@ private struct FilterChip: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .background(
-                    isSelected ? color.opacity(0.20) : DesignColors.surfaceSecondary,
+                    isSelected ? color.opacity(0.22) : DesignColors.surfaceElevated.opacity(0.74),
                     in: Capsule()
                 )
                 .foregroundStyle(isSelected ? color : DesignColors.textSecondary)

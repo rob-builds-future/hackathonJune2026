@@ -26,42 +26,8 @@ struct RootView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $selection) {
-                Section {
-                    Label("Word Library", systemImage: "character.book.closed")
-                        .tag(SidebarItem.wordLibrary)
-                        .foregroundStyle(selection == .wordLibrary ? DesignColors.selectionText : DesignColors.textPrimary)
-                        .listRowBackground(selection == .wordLibrary ? DesignColors.selection : Color.clear)
-                }
-
-                ForEach(sections) { section in
-                    Section(section.title) {
-                        ForEach(section.entries) { entry in
-                            EntrySidebarRow(entry: entry)
-                                .tag(SidebarItem.entry(entry.id))
-                                .listRowBackground(selection == .entry(entry.id) ? DesignColors.selection : Color.clear)
-                                .contextMenu {
-                                    Button(role: .destructive) {
-                                        delete(entry)
-                                    } label: {
-                                        Label("Delete", systemImage: "trash")
-                                    }
-                                }
-                        }
-                    }
-                }
-            }
-            .navigationSplitViewColumnWidth(min: 220, ideal: 260)
-            .navigationTitle("Novi")
-            .scrollContentBackground(.hidden)
-            .background(DesignColors.backgroundSecondary)
-            .toolbar {
-                ToolbarItem {
-                    Button(action: newEntry) {
-                        Label("New Entry", systemImage: "square.and.pencil")
-                    }
-                }
-            }
+            sidebar
+                .navigationSplitViewColumnWidth(min: 250, ideal: 290)
         } detail: {
             detail
         }
@@ -70,6 +36,129 @@ struct RootView: View {
                 pruneIfEmpty(id: oldID)
             }
         }
+        .toolbar(.hidden)
+    }
+
+    // MARK: - Sidebar
+
+    private var sidebar: some View {
+        VStack(spacing: 0) {
+            brandHeader
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: Spacing.small) {
+                    pinnedLibraryCard
+
+                    ForEach(sections) { section in
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(section.title)
+                                .font(Typography.metadata.weight(.semibold))
+                                .foregroundStyle(DesignColors.textMuted)
+                                .textCase(.uppercase)
+                                .padding(.horizontal, 6)
+
+                            ForEach(section.entries) { entry in
+                                Button {
+                                    selection = .entry(entry.id)
+                                } label: {
+                                    EntrySidebarRow(
+                                        entry: entry,
+                                        isSelected: selection == .entry(entry.id)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .contextMenu {
+                                    Button(role: .destructive) {
+                                        delete(entry)
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(12)
+            }
+            .scrollContentBackground(.hidden)
+        }
+        .background(DesignColors.sidebarGradient)
+    }
+
+    private var brandHeader: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(DesignColors.accentGradient)
+                Text("N")
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: 42, height: 42)
+            .shadow(color: DesignColors.cardShadowStrong, radius: 12, x: 0, y: 6)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Novi")
+                    .font(Typography.cardTitle)
+                    .foregroundStyle(DesignColors.textPrimary)
+                Text("future-self journal")
+                    .font(Typography.metadata)
+                    .foregroundStyle(DesignColors.textMuted)
+            }
+
+            Spacer()
+
+            Button(action: newEntry) {
+                Image(systemName: "square.and.pencil")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(DesignColors.selectionText)
+                    .frame(width: 34, height: 34)
+                    .background(DesignColors.accentGradient, in: RoundedRectangle(cornerRadius: 10))
+                    .shadow(color: DesignColors.cardShadowStrong, radius: 10, x: 0, y: 5)
+            }
+            .buttonStyle(.plain)
+            .help("New Entry")
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 24)
+        .padding(.bottom, 14)
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(DesignColors.glassStroke)
+                .frame(height: 1)
+        }
+    }
+
+    private var pinnedLibraryCard: some View {
+        Button {
+            selection = .wordLibrary
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "character.book.closed.fill")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(DesignColors.brandGold)
+                    .frame(width: 32, height: 32)
+                    .background(DesignColors.brandGold.opacity(0.14), in: RoundedRectangle(cornerRadius: 10))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Word Library")
+                        .font(Typography.bodyEmphasized)
+                        .foregroundStyle(selection == .wordLibrary ? DesignColors.selectionText : DesignColors.textPrimary)
+                    Text("words from your life")
+                        .font(Typography.metadata)
+                        .foregroundStyle(selection == .wordLibrary ? DesignColors.selectionText.opacity(0.72) : DesignColors.textMuted)
+                }
+
+                Spacer()
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(sidebarCardFill(isSelected: selection == .wordLibrary), in: RoundedRectangle(cornerRadius: 16))
+            .overlay(sidebarCardStroke(isSelected: selection == .wordLibrary))
+            .shadow(color: DesignColors.shadow, radius: 12, x: 0, y: 6)
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Detail
@@ -100,7 +189,7 @@ struct RootView: View {
             description: Text("Pick an entry from the sidebar or create a new one.")
         )
         .foregroundStyle(DesignColors.textSecondary)
-        .background(DesignColors.backgroundPrimary)
+        .background(DesignColors.auroraBackground)
     }
 
     // MARK: - Derived data
@@ -136,6 +225,15 @@ struct RootView: View {
         modelContext.delete(previous)
         try? modelContext.save()
     }
+
+    private func sidebarCardFill(isSelected: Bool) -> some ShapeStyle {
+        isSelected ? AnyShapeStyle(DesignColors.accentGradient) : AnyShapeStyle(DesignColors.cardGradient)
+    }
+
+    private func sidebarCardStroke(isSelected: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 16)
+            .stroke(isSelected ? DesignColors.glassStroke : DesignColors.separator.opacity(0.65), lineWidth: isSelected ? 1.4 : 1)
+    }
 }
 
 /// A day's worth of entries in the sidebar.
@@ -156,18 +254,38 @@ private struct DaySection: Identifiable {
 /// One entry row in the sidebar.
 private struct EntrySidebarRow: View {
     let entry: JournalEntryRecord
+    let isSelected: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(entry.displayTitle)
-                .font(Typography.bodyEmphasized)
-                .foregroundStyle(DesignColors.textPrimary)
-                .lineLimit(1)
-            Text(entry.updatedAt, format: .dateTime.hour().minute())
-                .font(Typography.metadata)
-                .foregroundStyle(DesignColors.textMuted)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 10) {
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(isSelected ? DesignColors.selectionText.opacity(0.85) : DesignColors.brandTeal.opacity(0.55))
+                    .frame(width: 4)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(entry.displayTitle)
+                        .font(Typography.bodyEmphasized)
+                        .foregroundStyle(isSelected ? DesignColors.selectionText : DesignColors.textPrimary)
+                        .lineLimit(2)
+                    Text(entry.updatedAt, format: .dateTime.hour().minute())
+                        .font(Typography.metadata)
+                        .foregroundStyle(isSelected ? DesignColors.selectionText.opacity(0.74) : DesignColors.textMuted)
+                }
+            }
         }
-        .padding(.vertical, 4)
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            isSelected ? AnyShapeStyle(DesignColors.accentGradient) : AnyShapeStyle(DesignColors.cardGradient),
+            in: RoundedRectangle(cornerRadius: 15)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 15)
+                .stroke(isSelected ? DesignColors.glassStroke : DesignColors.separator.opacity(0.55), lineWidth: isSelected ? 1.3 : 1)
+        )
+        .shadow(color: isSelected ? DesignColors.cardShadowStrong : DesignColors.shadow, radius: isSelected ? 14 : 8, x: 0, y: isSelected ? 7 : 3)
+        .contentShape(Rectangle())
     }
 }
 

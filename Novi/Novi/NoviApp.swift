@@ -14,6 +14,8 @@ struct NoviApp: App {
         WindowGroup {
             RootView()
         }
+        .windowStyle(.hiddenTitleBar)
+        .windowToolbarStyle(.unifiedCompact)
         .modelContainer(for: [JournalEntryRecord.self, VocabularyItemRecord.self, WordRecord.self])
     }
 }

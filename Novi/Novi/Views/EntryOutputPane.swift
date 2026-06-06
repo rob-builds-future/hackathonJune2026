@@ -24,7 +24,7 @@ struct EntryOutputPane: View {
             .padding(.vertical, Spacing.large)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(DesignColors.backgroundPrimary)
+        .background(DesignColors.auroraBackground)
     }
 
     // MARK: - Live translation (Tier 1)
@@ -41,7 +41,7 @@ struct EntryOutputPane: View {
                         explanationLanguage: explanationLanguage,
                         glossary: glossary
                     )
-                    Text("Hover a word to see its meaning.")
+                    Text("Click a word to see its meaning.")
                         .font(.caption2)
                         .foregroundStyle(DesignColors.textMuted)
                 } else {
