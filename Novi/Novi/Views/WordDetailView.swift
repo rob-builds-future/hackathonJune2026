@@ -12,7 +12,7 @@ struct WordDetailView: View {
     @Environment(\.dismiss) private var dismiss
 
     let word: WordRecord
-    var onOpenEntry: (UUID) -> Void = { _ in }
+    var onOpenEntry: (UUID, UUID) -> Void = { _, _ in }
 
     private var relatedEntries: [JournalEntryRecord] {
         word.entries.sorted { $0.createdAt > $1.createdAt }
@@ -154,7 +154,12 @@ struct WordDetailView: View {
             } else {
                 VStack(spacing: Spacing.xSmall) {
                     ForEach(relatedEntries) { entry in
-                        MemoryRow(entry: entry) { onOpenEntry(entry.id) }
+                        MemoryRow(entry: entry) {
+                            dismiss()
+                            DispatchQueue.main.async {
+                                onOpenEntry(entry.id, word.id)
+                            }
+                        }
                     }
                 }
             }

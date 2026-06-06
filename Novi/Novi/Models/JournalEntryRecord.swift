@@ -17,6 +17,8 @@ import SwiftData
 final class JournalEntryRecord {
     @Attribute(.unique) var id: UUID
     var createdAt: Date
+    /// User-facing memory date — drives journal grouping in the sidebar.
+    var journalDate: Date = Date()
     /// Last time the entry changed — drives the "last saved" label and sorting.
     var updatedAt: Date
 
@@ -34,6 +36,8 @@ final class JournalEntryRecord {
     var liveTranslation: String = ""
     /// The lesson's own translation (may be empty for AI lessons).
     var lessonTranslation: String = ""
+    /// Source text used for the current generated lesson.
+    var lessonSourceText: String = ""
 
     var grammarNotes: [String] = []
     var writingChallenge: String = ""
@@ -49,6 +53,7 @@ final class JournalEntryRecord {
     init(
         id: UUID = UUID(),
         createdAt: Date = Date(),
+        journalDate: Date? = nil,
         updatedAt: Date? = nil,
         title: String = "",
         sourceText: String = "",
@@ -56,12 +61,14 @@ final class JournalEntryRecord {
         targetLanguage: String = "en",
         liveTranslation: String = "",
         lessonTranslation: String = "",
+        lessonSourceText: String = "",
         grammarNotes: [String] = [],
         writingChallenge: String = "",
         vocabulary: [VocabularyItemRecord] = []
     ) {
         self.id = id
         self.createdAt = createdAt
+        self.journalDate = journalDate ?? createdAt
         self.updatedAt = updatedAt ?? createdAt
         self.title = title
         self.sourceText = sourceText
@@ -69,6 +76,7 @@ final class JournalEntryRecord {
         self.targetLanguage = targetLanguage
         self.liveTranslation = liveTranslation
         self.lessonTranslation = lessonTranslation
+        self.lessonSourceText = lessonSourceText
         self.grammarNotes = grammarNotes
         self.writingChallenge = writingChallenge
         self.vocabulary = vocabulary

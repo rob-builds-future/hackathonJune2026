@@ -24,6 +24,10 @@ struct HoverTranslatableText: View {
     let explanationLanguage: String
     /// Instant lookups keyed by lowercased word.
     var glossary: [String: String] = [:]
+    /// Optional trailing text to flash without re-animating the whole paragraph.
+    var highlightedSuffix: String = ""
+    var highlightOpacity: Double = 0
+    var fontSize: CGFloat = 15
     /// Translation backend (DeepL when configured, LibreTranslate fallback).
     var translationService: any TranslationService = TranslationServiceFactory.makeDefault()
 
@@ -33,6 +37,9 @@ struct HoverTranslatableText: View {
             wordsLanguage: wordsLanguage,
             explanationLanguage: explanationLanguage,
             glossary: glossary,
+            highlightedSuffix: highlightedSuffix,
+            highlightOpacity: highlightOpacity,
+            fontSize: fontSize,
             translationService: translationService
         )
     }
@@ -45,6 +52,9 @@ private struct ClickTranslatableTextView: NSViewRepresentable {
     let wordsLanguage: String
     let explanationLanguage: String
     let glossary: [String: String]
+    let highlightedSuffix: String
+    let highlightOpacity: Double
+    let fontSize: CGFloat
     let translationService: any TranslationService
 
     func makeCoordinator() -> Coordinator {
@@ -71,7 +81,7 @@ private struct ClickTranslatableTextView: NSViewRepresentable {
             glossary: glossary,
             translationService: translationService
         )
-        nsView.update(text: text)
+        nsView.update(text: text, highlightedSuffix: highlightedSuffix, highlightOpacity: highlightOpacity, fontSize: fontSize)
     }
 
     final class Coordinator: NSObject {
@@ -81,7 +91,6 @@ private struct ClickTranslatableTextView: NSViewRepresentable {
         private var translationService: any TranslationService
 
         private var cache: [String: String] = [:]
-        private var failed: Set<String> = []
         private var inFlight: Set<String> = []
         private var selectedWord: String?
         private var selectedAnchorRect: NSRect?
@@ -114,23 +123,24 @@ private struct ClickTranslatableTextView: NSViewRepresentable {
             self.translationService = translationService
             if languageChanged {
                 cache.removeAll()
-                failed.removeAll()
                 inFlight.removeAll()
                 closePopover()
             }
         }
 
         func showMeaning(for word: String, anchorRect: NSRect, in sourceView: NSView) {
-            let key = word.lowercased()
+            let cleanedWord = Self.cleanedWord(word)
+            guard !cleanedWord.isEmpty else { return }
+
+            let key = cacheKey(for: cleanedWord)
             selectedWord = word
             selectedAnchorRect = anchorRect
             selectedSourceView = sourceView
 
-            showPopover(word: word, meaning: meaning(for: key), isUnavailable: failed.contains(key), inFlight: inFlight.contains(key))
+            showPopover(word: word, meaning: meaning(for: key), isUnavailable: false, inFlight: inFlight.contains(key))
 
-            guard meaning(for: key) == nil, !inFlight.contains(key), !failed.contains(key) else { return }
+            guard meaning(for: key) == nil, !inFlight.contains(key) else { return }
             guard languagesValid else {
-                failed.insert(key)
                 showPopover(word: word, meaning: nil, isUnavailable: true, inFlight: false)
                 return
             }
@@ -139,24 +149,22 @@ private struct ClickTranslatableTextView: NSViewRepresentable {
             showPopover(word: word, meaning: nil, isUnavailable: false, inFlight: true)
 
             let service = translationService
-            let from = wordsLanguage
-            let to = explanationLanguage
+            let from = normalizedLanguage(wordsLanguage)
+            let to = normalizedLanguage(explanationLanguage)
 
             Task {
-                let result = try? await service.translate(key, from: from, to: to)
+                let result = try? await service.translate(cleanedWord, from: from, to: to)
                 let translated = result?.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 await MainActor.run {
                     self.inFlight.remove(key)
                     if let translated, !translated.isEmpty {
                         self.cache[key] = translated
-                    } else {
-                        self.failed.insert(key)
                     }
-                    guard self.selectedWord?.lowercased() == key else { return }
+                    guard self.selectedWord.map(Self.cleanedWord).map(self.cacheKey(for:)) == key else { return }
                     self.showPopover(
                         word: word,
                         meaning: self.meaning(for: key),
-                        isUnavailable: self.failed.contains(key),
+                        isUnavailable: translated == nil || translated?.isEmpty == true,
                         inFlight: false
                     )
                 }
@@ -164,12 +172,33 @@ private struct ClickTranslatableTextView: NSViewRepresentable {
         }
 
         private var languagesValid: Bool {
-            !wordsLanguage.isEmpty && !explanationLanguage.isEmpty
-                && explanationLanguage != "auto" && wordsLanguage != explanationLanguage
+            let from = normalizedLanguage(wordsLanguage)
+            let to = normalizedLanguage(explanationLanguage)
+            return !from.isEmpty && !to.isEmpty && to != "auto" && from != to
         }
 
         private func meaning(for key: String) -> String? {
-            glossary[key] ?? cache[key]
+            cache[key] ?? glossary[glossaryKey(from: key)]
+        }
+
+        private func cacheKey(for word: String) -> String {
+            "\(normalizedLanguage(wordsLanguage))|\(normalizedLanguage(explanationLanguage))|\(word.lowercased())"
+        }
+
+        private func glossaryKey(from cacheKey: String) -> String {
+            cacheKey.components(separatedBy: "|").last ?? cacheKey
+        }
+
+        private func normalizedLanguage(_ language: String) -> String {
+            language
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .components(separatedBy: "-")
+                .first ?? ""
+        }
+
+        private static func cleanedWord(_ word: String) -> String {
+            word.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
         }
 
         private func showPopover(word: String, meaning: String?, isUnavailable: Bool, inFlight: Bool) {
@@ -240,11 +269,11 @@ private final class ClickableWrappingTextView: NSView {
         updateHeight()
     }
 
-    func update(text: String) {
+    func update(text: String, highlightedSuffix: String = "", highlightOpacity: Double = 0, fontSize: CGFloat = 15) {
         if textView.string != text {
             textView.string = text
         }
-        applyTextStyle()
+        applyTextStyle(highlightedSuffix: highlightedSuffix, highlightOpacity: highlightOpacity, fontSize: fontSize)
         updateHeight()
     }
 
@@ -278,19 +307,36 @@ private final class ClickableWrappingTextView: NSView {
         textView.addGestureRecognizer(clickGesture)
     }
 
-    private func applyTextStyle() {
+    private func applyTextStyle(highlightedSuffix: String, highlightOpacity: Double, fontSize: CGFloat) {
         let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.lineSpacing = 3
+        paragraphStyle.lineSpacing = 4
 
         let textColor = NSColor(named: "TextPrimary") ?? .labelColor
-        textView.font = NSFont.systemFont(ofSize: 15)
+        textView.font = NSFont.systemFont(ofSize: fontSize)
         textView.textColor = textColor
         textView.typingAttributes = [
-            .font: NSFont.systemFont(ofSize: 15),
+            .font: NSFont.systemFont(ofSize: fontSize),
             .foregroundColor: textColor,
             .paragraphStyle: paragraphStyle
         ]
         textView.textStorage?.setAttributes(textView.typingAttributes, range: NSRange(location: 0, length: textView.string.utf16.count))
+
+        let suffix = highlightedSuffix.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard highlightOpacity > 0, !suffix.isEmpty else { return }
+
+        let nsString = textView.string as NSString
+        let range = nsString.range(of: suffix, options: [.backwards, .caseInsensitive])
+        guard range.location != NSNotFound else { return }
+
+        let teal = NSColor(named: "AccentPrimary") ?? .systemTeal
+        let highlight = teal.withAlphaComponent(max(0, min(1, highlightOpacity * 0.28)))
+        textView.textStorage?.addAttributes(
+            [
+                .backgroundColor: highlight,
+                .foregroundColor: textColor
+            ],
+            range: range
+        )
     }
 
     private func updateHeight() {

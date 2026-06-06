@@ -11,13 +11,15 @@ import SwiftData
 
 struct WordLibraryView: View {
     /// Opens a related journal entry (memory) by id.
-    var onOpenEntry: (UUID) -> Void = { _ in }
+    @Binding var openWordID: UUID?
+    var onOpenEntry: (UUID, UUID) -> Void = { _, _ in }
 
     @Query(sort: \WordRecord.lastSuggestedAt, order: .reverse)
     private var words: [WordRecord]
 
     @State private var search = ""
     @State private var statusFilter: LearningStatus?
+    @State private var path: [WordRecord] = []
 
     private var filtered: [WordRecord] {
         words.filter { word in
@@ -32,7 +34,7 @@ struct WordLibraryView: View {
     private let columns = [GridItem(.adaptive(minimum: 220, maximum: 320), spacing: 16)]
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             VStack(spacing: 0) {
                 libraryHeader
                 filterBar
@@ -46,6 +48,8 @@ struct WordLibraryView: View {
         }
         .searchable(text: $search, prompt: "Search your words")
         .toolbar(.hidden)
+        .onAppear(perform: openPendingWord)
+        .onChange(of: openWordID) { _, _ in openPendingWord() }
     }
 
     private var subtitle: String {
@@ -141,6 +145,13 @@ struct WordLibraryView: View {
             }
             .background(DesignColors.auroraBackground)
         }
+    }
+
+    private func openPendingWord() {
+        guard let openWordID,
+              let word = words.first(where: { $0.id == openWordID }) else { return }
+        path = [word]
+        self.openWordID = nil
     }
 }
 
@@ -240,7 +251,7 @@ extension LearningStatus {
 }
 
 #Preview {
-    WordLibraryView()
+    WordLibraryView(openWordID: .constant(nil))
         .modelContainer(for: [JournalEntryRecord.self, VocabularyItemRecord.self, WordRecord.self],
                         inMemory: true)
 }

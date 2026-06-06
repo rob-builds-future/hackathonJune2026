@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import NaturalLanguage
 import Observation
 import SwiftData
 
@@ -27,7 +28,9 @@ final class EntryEditorViewModel {
     private(set) var isGenerating = false
     private(set) var generationError: String?
     private(set) var isTranslating = false
+    private(set) var isTranslationPreparing = false
     private(set) var translationError: String?
+    private(set) var detectedSourceLanguage: String?
     private(set) var isGeneratingTitle = false
     /// Timestamp of the last successful save — shown as "last saved".
     private(set) var lastSavedAt: Date
@@ -42,6 +45,8 @@ final class EntryEditorViewModel {
 
     private let translationDebounce: Duration = .seconds(2)
     private let autosaveDebounce: Duration = .milliseconds(800)
+    private let autoDetectMinimumWords = 4
+    private let autoDetectMinimumCharacters = 18
     private static let sentenceTerminators: Set<Character> = [
         ".", "!", "?", "。", "！", "？", "…"
     ]
@@ -107,9 +112,17 @@ final class EntryEditorViewModel {
         scheduleLiveTranslation()
     }
 
+    /// The user-facing journal date changed: persist, but don't affect text processing.
+    func handleJournalDateChange() {
+        entry.updatedAt = Date()
+        scheduleAutosave()
+    }
+
     /// Final save when leaving the editor.
     func flush() {
         translationTask?.cancel()
+        isTranslationPreparing = false
+        isTranslating = false
         autosaveTask?.cancel()
         save()
     }
@@ -126,6 +139,7 @@ final class EntryEditorViewModel {
         do {
             let lesson = try await lessonService.generateLesson(from: entry.sourceText)
             entry.apply(lesson) { modelContext.delete($0) }
+            entry.lessonSourceText = trimmedText
             entry.updatedAt = Date()
             save()
 
@@ -154,16 +168,40 @@ final class EntryEditorViewModel {
         translationTask?.cancel()
 
         let text = trimmedText
+        refreshDetectedSourceLanguage(from: text)
         guard !text.isEmpty else {
             entry.liveTranslation = ""
             translationError = nil
             isTranslating = false
+            isTranslationPreparing = false
+            detectedSourceLanguage = nil
             lastTranslationKey = nil
+            return
+        }
+
+        guard shouldTranslate(text) else {
+            entry.liveTranslation = ""
+            lastTranslationKey = nil
+            isTranslating = false
+            isTranslationPreparing = false
+            detectedSourceLanguage = nil
+            translationError = nil
+            return
+        }
+
+        let key = Self.key(source: entry.sourceLanguage, target: entry.targetLanguage, text: text)
+        guard key != lastTranslationKey else {
+            isTranslating = false
+            isTranslationPreparing = false
+            translationError = nil
             return
         }
 
         let endsSentence = text.last.map(Self.sentenceTerminators.contains) ?? false
         let delay: Duration = endsSentence ? .zero : translationDebounce
+        isTranslationPreparing = delay > .zero
+        isTranslating = false
+        translationError = nil
 
         translationTask = Task { [weak self] in
             guard let self else { return }
@@ -177,8 +215,13 @@ final class EntryEditorViewModel {
 
     private func performLiveTranslation(of text: String) async {
         let key = Self.key(source: entry.sourceLanguage, target: entry.targetLanguage, text: text)
-        guard key != lastTranslationKey else { return }
+        guard key != lastTranslationKey else {
+            isTranslationPreparing = false
+            isTranslating = false
+            return
+        }
 
+        isTranslationPreparing = false
         isTranslating = true
         translationError = nil
 
@@ -188,25 +231,22 @@ final class EntryEditorViewModel {
             )
             guard !Task.isCancelled else { return }
             entry.liveTranslation = result.text
+            detectedSourceLanguage = entry.sourceLanguage == "auto"
+                ? result.detectedLanguageCode
+                : entry.sourceLanguage
             lastTranslationKey = key
-
-            // Auto-detect: switch the source picker to the detected language.
-            if entry.sourceLanguage == "auto", let detected = result.detectedLanguageCode {
-                entry.sourceLanguage = detected
-                // The detected language now owns this translation; record its key
-                // so the language-change re-trigger doesn't repeat the request.
-                lastTranslationKey = Self.key(source: detected, target: entry.targetLanguage, text: text)
-            }
 
             entry.updatedAt = Date()
             save()
         } catch is CancellationError {
-            // Superseded by newer input — ignore.
+            // Superseded by newer input — ignore without clobbering newer UI state.
+            return
         } catch {
             guard !Task.isCancelled else { return }
             translationError = error.localizedDescription
         }
 
+        isTranslationPreparing = false
         isTranslating = false
     }
 
@@ -265,6 +305,27 @@ final class EntryEditorViewModel {
 
     private var trimmedText: String {
         entry.sourceText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func shouldTranslate(_ text: String) -> Bool {
+        guard entry.sourceLanguage == "auto" else { return true }
+        return text.count >= autoDetectMinimumCharacters || wordCount(text) >= autoDetectMinimumWords
+    }
+
+    private func refreshDetectedSourceLanguage(from text: String) {
+        guard entry.sourceLanguage == "auto" else {
+            detectedSourceLanguage = entry.sourceLanguage
+            return
+        }
+
+        guard text.count >= 8 else {
+            detectedSourceLanguage = nil
+            return
+        }
+
+        let recognizer = NLLanguageRecognizer()
+        recognizer.processString(text)
+        detectedSourceLanguage = recognizer.dominantLanguage?.rawValue
     }
 
     private func wordCount(_ text: String) -> Int {
