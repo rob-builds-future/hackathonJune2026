@@ -58,8 +58,14 @@ final class LessonViewModel {
     private let translationService: TranslationService
     private var translationTask: Task<Void, Never>?
 
+    /// Creates the view model.
+    ///
+    /// Swap the lesson generator here to switch between the real AI backend and
+    /// the offline development fallback:
+    /// - `AILessonService()` — real AI-powered lessons (default).
+    /// - `MockLessonService()` — hardcoded data, no network, for development.
     init(
-        lessonService: LessonGenerating = MockLessonService(),
+        lessonService: LessonGenerating = AILessonService(),
         translationService: TranslationService = LibreTranslateService()
     ) {
         self.lessonService = lessonService
@@ -83,7 +89,9 @@ final class LessonViewModel {
         do {
             lesson = try await lessonService.generateLesson(from: journalEntry)
         } catch {
-            errorMessage = "Could not generate a lesson: \(error.localizedDescription)"
+            // Typed errors (AILessonError, …) already carry readable messages.
+            errorMessage = (error as? LocalizedError)?.errorDescription
+                ?? "Could not generate a lesson: \(error.localizedDescription)"
             lesson = nil
         }
 
