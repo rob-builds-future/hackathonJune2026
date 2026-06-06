@@ -27,8 +27,6 @@ struct JournalInputView: View {
             }
 
             languagePickers
-
-            generateButton
         }
         .padding(20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -48,27 +46,6 @@ struct JournalInputView: View {
         }
         .pickerStyle(.menu)
         .fixedSize()
-    }
-
-    private var generateButton: some View {
-        HStack {
-            Button {
-                Task { await viewModel.generateLesson() }
-            } label: {
-                if viewModel.isGenerating {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Text("Generate Lesson")
-                }
-            }
-            .disabled(!viewModel.canGenerate)
-
-            if let errorMessage = viewModel.errorMessage {
-                Text(errorMessage)
-                    .font(.callout)
-                    .foregroundStyle(.red)
-            }
-        }
     }
 
     /// A small set of languages offered in the UI. Codes match LibreTranslate.

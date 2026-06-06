@@ -2,6 +2,10 @@
 xcuserdata/
 *.xcuserstate
 
+# Shared schemes can hold secrets set as scheme environment variables
+# (e.g. NOVI_OPENAI_API_KEY) — keep them out of the repo.
+xcshareddata/
+
 # Build artifacts
 DerivedData/
 build/

@@ -31,8 +31,8 @@ struct AILessonService: LessonGenerating {
     /// Base URL of the OpenAI-compatible API.
     var baseURL: URL = URL(string: "https://api.openai.com/v1")!
 
-    /// Chat model to use. `gpt-4o-mini` is fast, cheap and JSON-capable.
-    var model: String = "gpt-4o-mini"
+    /// Chat model to use.
+    var model: String = "gpt-5.4-mini"
 
     /// The language the lesson should teach / translate into.
     var targetLanguage: String = "English"
@@ -46,7 +46,15 @@ struct AILessonService: LessonGenerating {
         guard !trimmed.isEmpty else { throw AILessonError.emptyInput }
         guard !apiKey.isEmpty else { throw AILessonError.notConfigured }
 
-        let request = try makeRequest(for: trimmed)
+        // Scale the lesson's depth to the length of the entry: more text → more
+        // input. Roughly 10% of the words become vocabulary, 2% grammar notes.
+        let words = Self.wordCount(of: trimmed)
+        let vocabularyCount = max(1, Int((Double(words) * 0.10).rounded()))
+        let grammarCount = max(1, Int((Double(words) * 0.02).rounded()))
+
+        let request = try makeRequest(
+            for: trimmed, vocabularyCount: vocabularyCount, grammarCount: grammarCount
+        )
 
         let data: Data
         let response: URLResponse
@@ -71,7 +79,9 @@ struct AILessonService: LessonGenerating {
 
     // MARK: - Request building
 
-    private func makeRequest(for entry: String) throws -> URLRequest {
+    private func makeRequest(
+        for entry: String, vocabularyCount: Int, grammarCount: Int
+    ) throws -> URLRequest {
         var request = URLRequest(url: baseURL.appendingPathComponent("chat/completions"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -82,12 +92,21 @@ struct AILessonService: LessonGenerating {
             temperature: 0.4,
             responseFormat: .init(type: "json_object"),
             messages: [
-                .init(role: "system", content: Self.systemPrompt(targetLanguage: targetLanguage)),
+                .init(role: "system", content: Self.systemPrompt(
+                    targetLanguage: targetLanguage,
+                    vocabularyCount: vocabularyCount,
+                    grammarCount: grammarCount
+                )),
                 .init(role: "user", content: Self.userPrompt(entry: entry))
             ]
         )
         request.httpBody = try JSONEncoder().encode(body)
         return request
+    }
+
+    /// Counts whitespace-separated words in `text`.
+    private static func wordCount(of text: String) -> Int {
+        text.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
     }
 
     // MARK: - Decoding
@@ -120,19 +139,21 @@ struct AILessonService: LessonGenerating {
 
     // MARK: - Prompts
 
-    private static func systemPrompt(targetLanguage: String) -> String {
+    private static func systemPrompt(
+        targetLanguage: String, vocabularyCount: Int, grammarCount: Int
+    ) -> String {
         """
         You are a friendly language tutor for absolute beginners who cannot yet \
         speak or understand the target language. The target language is \
         \(targetLanguage).
 
         Given the user's journal entry, create one short, practical, \
-        beginner-friendly lesson.
+        beginner-friendly lesson. Do NOT translate the whole entry.
 
         Rules:
-        - Translate the entire journal entry into \(targetLanguage).
-        - Extract a few useful vocabulary items taken from the user's own text.
-        - Explain one or two relevant grammar points, briefly and simply.
+        - Extract about \(vocabularyCount) useful vocabulary item(s) taken from the \
+        user's own text. Pick the most useful words.
+        - Explain about \(grammarCount) relevant grammar point(s), briefly and simply.
         - Create exactly one short writing challenge based on the entry.
         - Keep everything concise and beginner-friendly.
         - Respond with VALID JSON ONLY. No markdown, no code fences, no commentary.
@@ -140,9 +161,8 @@ struct AILessonService: LessonGenerating {
         Respond using exactly this JSON shape:
         {
           "sourceText": "the user's original text, unchanged",
-          "translation": "the full entry translated into \(targetLanguage)",
           "vocabulary": [
-            { "term": "word/phrase", "translation": "its meaning", "example": "short example sentence" }
+            { "term": "word/phrase", "translation": "its meaning in \(targetLanguage)", "example": "short example sentence" }
           ],
           "grammarNotes": ["one short grammar note", "an optional second note"],
           "writingChallenge": "one short writing prompt"
@@ -189,7 +209,7 @@ private struct APIErrorResponse: Decodable {
 /// keeping the wire format decoupled from the domain model.
 private struct AILessonDTO: Decodable {
     let sourceText: String?
-    let translation: String
+    let translation: String?
     let vocabulary: [Vocab]
     let grammarNotes: FlexibleStringArray
     let writingChallenge: String
@@ -203,7 +223,7 @@ private struct AILessonDTO: Decodable {
     func toLesson(fallbackSourceText: String) -> Lesson {
         Lesson(
             sourceText: sourceText?.isEmpty == false ? sourceText! : fallbackSourceText,
-            translation: translation,
+            translation: translation ?? "",
             vocabulary: vocabulary.map {
                 VocabularyItem(term: $0.term, translation: $0.translation, example: $0.example)
             },

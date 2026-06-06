@@ -16,6 +16,7 @@ struct TranslationOutputView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 liveTranslationSection
+                generateButton
                 lessonSections
             }
             .padding(20)
@@ -52,15 +53,34 @@ struct TranslationOutputView: View {
         }
     }
 
+    // MARK: - Generate action
+
+    private var generateButton: some View {
+        HStack {
+            Button {
+                Task { await viewModel.generateLesson() }
+            } label: {
+                if viewModel.isGenerating {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Text("Generate Lesson")
+                }
+            }
+            .disabled(!viewModel.canGenerate)
+
+            if let errorMessage = viewModel.errorMessage {
+                Text(errorMessage)
+                    .font(.callout)
+                    .foregroundStyle(.red)
+            }
+        }
+    }
+
     // MARK: - Lesson
 
     @ViewBuilder
     private var lessonSections: some View {
         if let lesson = viewModel.lesson {
-            LessonSectionView(title: "Translation") {
-                Text(lesson.translation).textSelection(.enabled)
-            }
-
             LessonSectionView(title: "Vocabulary") {
                 VStack(alignment: .leading, spacing: 10) {
                     ForEach(lesson.vocabulary) { VocabularyRow(item: $0) }

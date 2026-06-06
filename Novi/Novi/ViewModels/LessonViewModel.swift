@@ -52,11 +52,14 @@ final class LessonViewModel {
     private(set) var translationErrorMessage: String?
 
     /// Seconds of typing inactivity before a live translation is triggered.
-    private let translationDebounce: Duration = .seconds(3)
+    private let translationDebounce: Duration = .seconds(2)
 
     private let lessonService: LessonGenerating
     private let translationService: TranslationService
     private var translationTask: Task<Void, Never>?
+    /// Identifies the last successful translation (text + language pair) so the
+    /// same request is not sent twice in a row.
+    private var lastTranslationKey: String?
 
     /// Creates the view model.
     ///
@@ -113,16 +116,30 @@ final class LessonViewModel {
             liveTranslation = nil
             translationErrorMessage = nil
             isTranslating = false
+            lastTranslationKey = nil
             return
         }
 
+        // A finished sentence (entry ends with a full stop) translates
+        // immediately; otherwise we wait for a pause in typing.
+        let endsSentence = text.last.map(Self.sentenceTerminators.contains) ?? false
+        let delay: Duration = endsSentence ? .zero : translationDebounce
+
         translationTask = Task { [weak self] in
             guard let self else { return }
-            try? await Task.sleep(for: self.translationDebounce)
+            if delay > .zero {
+                try? await Task.sleep(for: delay)
+            }
             guard !Task.isCancelled else { return }
             await self.performLiveTranslation(of: text)
         }
     }
+
+    /// Characters that mark the end of a sentence and trigger an immediate
+    /// translation (Latin plus common CJK full stops).
+    private static let sentenceTerminators: Set<Character> = [
+        ".", "!", "?", "。", "！", "？", "…"
+    ]
 
     /// Cancels any pending or in-flight live translation.
     func cancelLiveTranslation() {
@@ -131,6 +148,10 @@ final class LessonViewModel {
     }
 
     private func performLiveTranslation(of text: String) async {
+        // Skip if we already translated this exact text for this language pair.
+        let key = "\(sourceLanguage)|\(targetLanguage)|\(text)"
+        guard key != lastTranslationKey else { return }
+
         isTranslating = true
         translationErrorMessage = nil
 
@@ -140,6 +161,7 @@ final class LessonViewModel {
             )
             guard !Task.isCancelled else { return }
             liveTranslation = result
+            lastTranslationKey = key
         } catch is CancellationError {
             // Superseded by newer input — ignore.
         } catch {
