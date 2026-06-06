@@ -14,30 +14,42 @@ struct EntryInputPane: View {
     let viewModel: EntryEditorViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Spacing.small) {
             TextField("Title", text: $entry.title)
-                .font(.title2.weight(.semibold))
+                .font(Typography.title)
                 .textFieldStyle(.plain)
+                .foregroundStyle(DesignColors.textPrimary)
 
             Text(savedStatus)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(Typography.caption)
+                .foregroundStyle(DesignColors.textMuted)
 
             Divider()
+                .overlay(DesignColors.separator)
 
             TextEditor(text: $entry.sourceText)
-                .font(.body)
+                .font(Typography.body)
+                .foregroundStyle(DesignColors.textPrimary)
+                .scrollContentBackground(.hidden)
+                .background(DesignColors.surfaceInset)
                 .frame(maxHeight: .infinity)
-                .padding(4)
+                .padding(8)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(.quaternary, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: CornerRadius.small)
+                        .stroke(DesignColors.separator, lineWidth: 1)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: CornerRadius.small)
+                        .stroke(DesignColors.focusRing.opacity(0.18), lineWidth: 1)
+                        .padding(2)
                 )
 
             languagePickers
         }
-        .padding(20)
+        .padding(.horizontal, Spacing.medium)
+        .padding(.vertical, Spacing.large)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(DesignColors.backgroundPrimary)
     }
 
     private var savedStatus: String {
@@ -49,12 +61,18 @@ struct EntryInputPane: View {
 
     private var languagePickers: some View {
         HStack(spacing: 12) {
+            Text("From")
+                .font(Typography.caption)
+                .foregroundStyle(DesignColors.textMuted)
             Picker("From", selection: $entry.sourceLanguage) {
                 Text("Auto-detect").tag("auto")
                 ForEach(Self.languages, id: \.code) { Text($0.name).tag($0.code) }
             }
             Image(systemName: "arrow.right")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DesignColors.textMuted)
+            Text("To")
+                .font(Typography.caption)
+                .foregroundStyle(DesignColors.textMuted)
             Picker("To", selection: $entry.targetLanguage) {
                 ForEach(Self.languages, id: \.code) { Text($0.name).tag($0.code) }
             }

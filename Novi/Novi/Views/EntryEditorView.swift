@@ -21,12 +21,13 @@ struct EntryEditorView: View {
     var body: some View {
         HSplitView {
             EntryInputPane(entry: entry, viewModel: viewModel)
-                .frame(minWidth: 320, idealWidth: 420)
+                .frame(minWidth: 420, idealWidth: 620)
 
             EntryOutputPane(entry: entry, viewModel: viewModel)
-                .frame(minWidth: 320, idealWidth: 460)
+                .frame(minWidth: 360, idealWidth: 480)
         }
-        .frame(minWidth: 760, minHeight: 520)
+        .frame(minWidth: 860, minHeight: 560)
+        .background(DesignColors.backgroundPrimary)
         .onChange(of: entry.sourceText) { viewModel.handleTextEdit() }
         .onChange(of: entry.title) { viewModel.handleTitleEdit() }
         .onChange(of: entry.sourceLanguage) { viewModel.handleLanguageChange() }

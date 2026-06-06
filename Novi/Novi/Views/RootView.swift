@@ -30,6 +30,8 @@ struct RootView: View {
                 Section {
                     Label("Word Library", systemImage: "character.book.closed")
                         .tag(SidebarItem.wordLibrary)
+                        .foregroundStyle(selection == .wordLibrary ? DesignColors.selectionText : DesignColors.textPrimary)
+                        .listRowBackground(selection == .wordLibrary ? DesignColors.selection : Color.clear)
                 }
 
                 ForEach(sections) { section in
@@ -37,6 +39,7 @@ struct RootView: View {
                         ForEach(section.entries) { entry in
                             EntrySidebarRow(entry: entry)
                                 .tag(SidebarItem.entry(entry.id))
+                                .listRowBackground(selection == .entry(entry.id) ? DesignColors.selection : Color.clear)
                                 .contextMenu {
                                     Button(role: .destructive) {
                                         delete(entry)
@@ -50,6 +53,8 @@ struct RootView: View {
             }
             .navigationSplitViewColumnWidth(min: 220, ideal: 260)
             .navigationTitle("Novi")
+            .scrollContentBackground(.hidden)
+            .background(DesignColors.backgroundSecondary)
             .toolbar {
                 ToolbarItem {
                     Button(action: newEntry) {
@@ -94,6 +99,8 @@ struct RootView: View {
             systemImage: "book.closed",
             description: Text("Pick an entry from the sidebar or create a new one.")
         )
+        .foregroundStyle(DesignColors.textSecondary)
+        .background(DesignColors.backgroundPrimary)
     }
 
     // MARK: - Derived data
@@ -153,12 +160,14 @@ private struct EntrySidebarRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(entry.displayTitle)
+                .font(Typography.bodyEmphasized)
+                .foregroundStyle(DesignColors.textPrimary)
                 .lineLimit(1)
             Text(entry.updatedAt, format: .dateTime.hour().minute())
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(Typography.metadata)
+                .foregroundStyle(DesignColors.textMuted)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
     }
 }
 

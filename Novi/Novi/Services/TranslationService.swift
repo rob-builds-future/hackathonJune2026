@@ -17,10 +17,9 @@ struct TranslationResult {
 
 /// Translates text from one language into another.
 ///
-/// The UI depends only on this protocol. Today it is backed by the
-/// self-hosted LibreTranslate instance (``LibreTranslateService``); swapping in
-/// a different engine later means only providing a new conforming type.
-protocol TranslationService {
+/// The UI depends only on this protocol. The default implementation is chosen
+/// by ``TranslationServiceFactory``.
+protocol TranslationService: Sendable {
     /// Translates `text` from `source` into `target`.
     /// - Parameters:
     ///   - text: The text to translate.
@@ -28,4 +27,11 @@ protocol TranslationService {
     ///   - target: Target language code (e.g. `"en"`).
     /// - Returns: The translated text plus any detected source language.
     func translate(_ text: String, from source: String, to target: String) async throws -> TranslationResult
+}
+
+enum TranslationServiceFactory {
+    static func makeDefault() -> any TranslationService {
+        let key = ProcessInfo.processInfo.environment["NOVI_DEEPL_API_KEY"] ?? ""
+        return key.isEmpty ? LibreTranslateService() : DeepLTranslationService(apiKey: key)
+    }
 }

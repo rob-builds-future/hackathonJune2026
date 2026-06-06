@@ -35,11 +35,12 @@ struct WordLibraryView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 filterBar
-                Divider()
+                Divider().overlay(DesignColors.separator)
                 content
             }
             .navigationTitle("Word Library")
             .navigationSubtitle(subtitle)
+            .background(DesignColors.backgroundPrimary)
             .navigationDestination(for: WordRecord.self) { word in
                 WordDetailView(word: word, onOpenEntry: onOpenEntry)
             }
@@ -56,7 +57,7 @@ struct WordLibraryView: View {
     private var filterBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                FilterChip(title: "All", color: .accentColor,
+                FilterChip(title: "All", color: DesignColors.accentPrimary,
                            isSelected: statusFilter == nil) { statusFilter = nil }
                 ForEach(LearningStatus.allCases) { status in
                     FilterChip(title: status.label, color: status.color,
@@ -66,8 +67,9 @@ struct WordLibraryView: View {
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            .padding(.vertical, 12)
         }
+        .background(DesignColors.backgroundPrimary)
     }
 
     // MARK: - Content
@@ -80,8 +82,14 @@ struct WordLibraryView: View {
                 systemImage: "leaf",
                 description: Text("As you journal and generate lessons, the words your life teaches you gather here.")
             )
+            .foregroundStyle(DesignColors.textSecondary)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(DesignColors.backgroundPrimary)
         } else if filtered.isEmpty {
             ContentUnavailableView.search(text: search)
+                .foregroundStyle(DesignColors.textSecondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(DesignColors.backgroundPrimary)
         } else {
             ScrollView {
                 LazyVGrid(columns: columns, spacing: 16) {
@@ -92,8 +100,9 @@ struct WordLibraryView: View {
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(16)
+                .padding(Spacing.medium)
             }
+            .background(DesignColors.backgroundPrimary)
         }
     }
 }
@@ -104,15 +113,16 @@ private struct WordCard: View {
     let word: WordRecord
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Spacing.xSmall) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(word.term)
-                    .font(.title3.weight(.semibold))
+                    .font(Typography.cardTitle)
+                    .foregroundStyle(DesignColors.textPrimary)
                     .lineLimit(1)
-                Text(word.translation)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+            Text(word.translation)
+                .font(.callout)
+                .foregroundStyle(DesignColors.textSecondary)
+                .lineLimit(1)
             }
 
             Spacer(minLength: 0)
@@ -122,25 +132,26 @@ private struct WordCard: View {
                 Spacer()
                 Text("\(word.timesSuggested)×")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DesignColors.textMuted)
                     .help("Suggested \(word.timesSuggested) times")
             }
 
             ProgressView(value: word.confidenceScore)
                 .tint(word.learningStatus.color)
         }
-        .padding(16)
-        .frame(height: 150, alignment: .topLeading)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 14))
+        .padding(Spacing.small)
+        .frame(height: 142, alignment: .topLeading)
+        .background(DesignColors.surfaceElevated, in: RoundedRectangle(cornerRadius: CornerRadius.medium))
         .overlay(alignment: .top) {
             RoundedRectangle(cornerRadius: 14)
-                .fill(word.learningStatus.color.opacity(0.6))
+                .fill(word.learningStatus.color.opacity(0.65))
                 .frame(height: 4)
                 .padding(.horizontal, 10)
         }
         .overlay(
-            RoundedRectangle(cornerRadius: 14).stroke(.quaternary, lineWidth: 1)
+            RoundedRectangle(cornerRadius: CornerRadius.medium).stroke(DesignColors.separator, lineWidth: 1)
         )
+        .shadow(color: DesignColors.shadow, radius: 8, x: 0, y: 3)
     }
 }
 
@@ -156,13 +167,14 @@ private struct FilterChip: View {
         Button(action: action) {
             Text(title)
                 .font(.callout.weight(.medium))
+                .lineLimit(1)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .background(
-                    isSelected ? color.opacity(0.20) : Color.secondary.opacity(0.10),
+                    isSelected ? color.opacity(0.20) : DesignColors.surfaceSecondary,
                     in: Capsule()
                 )
-                .foregroundStyle(isSelected ? color : .secondary)
+                .foregroundStyle(isSelected ? color : DesignColors.textSecondary)
         }
         .buttonStyle(.plain)
     }
@@ -187,11 +199,11 @@ struct StatusBadge: View {
 extension LearningStatus {
     var color: Color {
         switch self {
-        case .new: return .secondary
-        case .learning: return .orange
-        case .practicing: return .yellow
-        case .familiar: return .blue
-        case .mastered: return .green
+        case .new: return DesignColors.textMuted
+        case .learning: return DesignColors.warning
+        case .practicing: return DesignColors.vocabularyAccent
+        case .familiar: return DesignColors.accentPrimary
+        case .mastered: return DesignColors.success
         }
     }
 }

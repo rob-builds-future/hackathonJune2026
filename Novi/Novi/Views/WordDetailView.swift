@@ -18,30 +18,33 @@ struct WordDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
+            VStack(alignment: .leading, spacing: Spacing.large) {
                 header
                 progressSection
                 statisticsSection
                 if !word.example.isEmpty { exampleSection }
                 relatedMemoriesSection
             }
-            .padding(28)
-            .frame(maxWidth: 640, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, Spacing.large)
+            .padding(.vertical, Spacing.xLarge)
+            .frame(maxWidth: 760, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .navigationTitle(word.term)
+        .background(DesignColors.backgroundPrimary)
     }
 
     // MARK: - Header (highest emphasis)
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Spacing.xSmall) {
             Text(word.term)
-                .font(.system(size: 40, weight: .bold))
+                .font(Typography.hero)
+                .foregroundStyle(DesignColors.textPrimary)
                 .textSelection(.enabled)
             Text(word.translation)
-                .font(.title2)
-                .foregroundStyle(.secondary)
+                .font(Typography.title)
+                .foregroundStyle(DesignColors.textSecondary)
                 .textSelection(.enabled)
         }
     }
@@ -49,12 +52,12 @@ struct WordDetailView: View {
     // MARK: - Progress (medium emphasis)
 
     private var progressSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Spacing.xSmall) {
             HStack {
                 StatusBadge(status: word.learningStatus)
                 Spacer()
                 Text("\(Int(word.confidenceScore * 100))%")
-                    .font(.headline)
+                    .font(Typography.bodyEmphasized)
                     .foregroundStyle(word.learningStatus.color)
             }
             ProgressView(value: word.confidenceScore)
@@ -66,7 +69,7 @@ struct WordDetailView: View {
 
     private var statisticsSection: some View {
         let columns = [GridItem(.adaptive(minimum: 130), spacing: 12)]
-        return LazyVGrid(columns: columns, spacing: 12) {
+        return LazyVGrid(columns: columns, spacing: Spacing.small) {
             StatTile(label: "Times Suggested", value: "\(word.timesSuggested)", icon: "sparkles")
             StatTile(label: "Times Used", value: "\(word.timesUsedByUser)", icon: "pencil")
             StatTile(label: "First Learned", value: Self.date(word.firstSuggestedAt), icon: "calendar")
@@ -93,32 +96,33 @@ struct WordDetailView: View {
                 .textSelection(.enabled)
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
+                .background(DesignColors.surfaceInset, in: RoundedRectangle(cornerRadius: CornerRadius.small))
         }
     }
 
     // MARK: - Related memories (special emphasis)
 
     private var relatedMemoriesSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Spacing.xSmall) {
             HStack(spacing: 8) {
                 Image(systemName: "book.closed.fill")
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(DesignColors.accentPrimary)
                 Text("Related Memories")
-                    .font(.title3.weight(.semibold))
+                    .font(Typography.sectionTitle)
+                    .foregroundStyle(DesignColors.textPrimary)
             }
 
             Text("Where this word showed up in your life")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DesignColors.textSecondary)
 
             if relatedEntries.isEmpty {
                 Text("No linked journal entries yet.")
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DesignColors.textSecondary)
                     .padding(.top, 4)
             } else {
-                VStack(spacing: 8) {
+                VStack(spacing: Spacing.xSmall) {
                     ForEach(relatedEntries) { entry in
                         MemoryRow(entry: entry) { onOpenEntry(entry.id) }
                     }
@@ -131,6 +135,8 @@ struct WordDetailView: View {
     private func sectionTitle(_ text: String) -> some View {
         Text(text)
             .font(.title3.weight(.semibold))
+            .font(Typography.sectionTitle)
+            .foregroundStyle(DesignColors.textPrimary)
     }
 }
 
@@ -144,14 +150,19 @@ private struct StatTile: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Label(label, systemImage: icon)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(Typography.caption)
+                .foregroundStyle(DesignColors.textMuted)
             Text(value)
-                .font(.title3.weight(.medium))
+                .font(Typography.cardTitle)
+                .foregroundStyle(DesignColors.textPrimary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
+        .padding(Spacing.small)
+        .background(DesignColors.surfaceElevated, in: RoundedRectangle(cornerRadius: CornerRadius.small))
+        .overlay(
+            RoundedRectangle(cornerRadius: CornerRadius.small)
+                .stroke(DesignColors.separator, lineWidth: 1)
+        )
     }
 }
 
@@ -163,24 +174,29 @@ private struct MemoryRow: View {
         Button(action: action) {
             HStack(spacing: 12) {
                 Image(systemName: "text.book.closed")
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(DesignColors.accentPrimary)
                     .frame(width: 24)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(entry.displayTitle)
                         .fontWeight(.medium)
+                        .foregroundStyle(DesignColors.textPrimary)
                         .lineLimit(1)
                     Text(entry.createdAt.formatted(date: .abbreviated, time: .omitted))
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(DesignColors.textMuted)
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(DesignColors.textMuted)
             }
-            .padding(12)
+            .padding(Spacing.small)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
+            .background(DesignColors.surfaceElevated, in: RoundedRectangle(cornerRadius: CornerRadius.small))
+            .overlay(
+                RoundedRectangle(cornerRadius: CornerRadius.small)
+                    .stroke(DesignColors.separator, lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
     }

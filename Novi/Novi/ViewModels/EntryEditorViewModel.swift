@@ -36,7 +36,7 @@ final class EntryEditorViewModel {
 
     private let modelContext: ModelContext
     private let lessonService: LessonGenerating
-    private let translationService: TranslationService
+    private let translationService: any TranslationService
     private let titleService: TitleGenerating
     private let wordLibrary = WordLibraryService()
 
@@ -52,12 +52,22 @@ final class EntryEditorViewModel {
     /// True once a title exists (typed or generated), to avoid re-generating.
     private var hasResolvedTitle: Bool
 
+    convenience init(entry: JournalEntryRecord, modelContext: ModelContext) {
+        self.init(
+            entry: entry,
+            modelContext: modelContext,
+            lessonService: AILessonService(),
+            translationService: TranslationServiceFactory.makeDefault(),
+            titleService: AILessonService()
+        )
+    }
+
     init(
         entry: JournalEntryRecord,
         modelContext: ModelContext,
-        lessonService: LessonGenerating = AILessonService(),
-        translationService: TranslationService = LibreTranslateService(),
-        titleService: TitleGenerating = AILessonService()
+        lessonService: LessonGenerating,
+        translationService: any TranslationService,
+        titleService: TitleGenerating
     ) {
         self.entry = entry
         self.modelContext = modelContext

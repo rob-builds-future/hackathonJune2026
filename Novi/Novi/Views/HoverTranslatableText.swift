@@ -24,7 +24,7 @@ struct HoverTranslatableText: View {
     /// Instant lookups keyed by lowercased word.
     var glossary: [String: String] = [:]
     /// Translation backend (Novi's own LibreTranslate by default).
-    var translationService = LibreTranslateService()
+    var translationService: any TranslationService = TranslationServiceFactory.makeDefault()
 
     @State private var cache: [String: String] = [:]
     @State private var failed: Set<String> = []
@@ -50,6 +50,7 @@ struct HoverTranslatableText: View {
                     )
                 } else {
                     Text(token.display)
+                        .foregroundStyle(DesignColors.textPrimary)
                 }
             }
         }
@@ -105,7 +106,7 @@ private struct HoverWord: View {
         Text(display)
             .padding(.horizontal, 1)
             .background(
-                isHovered ? Color.accentColor.opacity(0.20) : .clear,
+                isHovered ? DesignColors.accentPrimary.opacity(0.18) : .clear,
                 in: RoundedRectangle(cornerRadius: 3)
             )
             .onHover { hovering in
@@ -118,21 +119,22 @@ private struct HoverWord: View {
                         .font(.headline)
                     if let meaning, !meaning.isEmpty {
                         Text(meaning)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(DesignColors.textSecondary)
                             .textSelection(.enabled)
                     } else if isUnavailable {
                         Text("No translation available")
                             .font(.callout)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(DesignColors.textSecondary)
                     } else {
                         HStack(spacing: 6) {
                             ProgressView().controlSize(.small)
-                            Text("Translating…").foregroundStyle(.secondary)
+                            Text("Translating…").foregroundStyle(DesignColors.textSecondary)
                         }
                     }
                 }
                 .padding(12)
                 .frame(minWidth: 130, alignment: .leading)
+                .background(DesignColors.surfacePrimary)
             }
     }
 }

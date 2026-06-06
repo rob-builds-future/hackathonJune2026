@@ -15,23 +15,25 @@ struct EntryOutputPane: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: Spacing.small) {
                 liveTranslationSection
                 generateButton
                 lessonSections
             }
-            .padding(20)
+            .padding(.horizontal, Spacing.medium)
+            .padding(.vertical, Spacing.large)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(DesignColors.backgroundPrimary)
     }
 
     // MARK: - Live translation (Tier 1)
 
     private var liveTranslationSection: some View {
-        LessonSectionView(title: "Live Translation") {
+        LessonSectionView(title: "Live Translation", icon: "bubble.left.and.text.bubble.right", accent: DesignColors.accentPrimary) {
             VStack(alignment: .leading, spacing: 8) {
                 if let error = viewModel.translationError {
-                    Text(error).font(.callout).foregroundStyle(.red)
+                    Text(error).font(.callout).foregroundStyle(DesignColors.error)
                 } else if !entry.liveTranslation.isEmpty {
                     HoverTranslatableText(
                         text: entry.liveTranslation,
@@ -41,16 +43,16 @@ struct EntryOutputPane: View {
                     )
                     Text("Hover a word to see its meaning.")
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(DesignColors.textMuted)
                 } else {
                     Text("Start typing — a translation appears after a short pause.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(DesignColors.textSecondary)
                 }
 
                 if viewModel.isTranslating {
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.small)
-                        Text("Translating…").font(.caption).foregroundStyle(.secondary)
+                        Text("Translating…").font(.caption).foregroundStyle(DesignColors.textMuted)
                     }
                 }
             }
@@ -88,10 +90,12 @@ struct EntryOutputPane: View {
                 }
             }
             .disabled(!viewModel.canGenerate)
+            .buttonStyle(.borderedProminent)
+            .tint(viewModel.canGenerate ? DesignColors.accentPrimary : DesignColors.textMuted)
         }
 
         if let error = viewModel.generationError {
-            Text(error).font(.callout).foregroundStyle(.red)
+            Text(error).font(.callout).foregroundStyle(DesignColors.error)
         }
     }
 
@@ -101,7 +105,7 @@ struct EntryOutputPane: View {
     private var lessonSections: some View {
         if hasLesson {
             if !entry.vocabulary.isEmpty {
-                LessonSectionView(title: "Vocabulary") {
+                LessonSectionView(title: "Vocabulary", icon: "character.book.closed", accent: DesignColors.vocabularyAccent) {
                     VStack(alignment: .leading, spacing: 10) {
                         ForEach(entry.vocabulary) { VocabularyRow(item: $0.asVocabularyItem) }
                     }
@@ -109,25 +113,29 @@ struct EntryOutputPane: View {
             }
 
             if !entry.grammarNotes.isEmpty {
-                LessonSectionView(title: "Grammar Notes") {
+                LessonSectionView(title: "Grammar Notes", icon: "textformat", accent: DesignColors.grammarAccent) {
                     VStack(alignment: .leading, spacing: 6) {
                         ForEach(Array(entry.grammarNotes.enumerated()), id: \.offset) { _, note in
                             Label(note, systemImage: "circle.fill")
                                 .labelStyle(.titleAndIcon)
                                 .font(.callout)
+                                .foregroundStyle(DesignColors.textPrimary, DesignColors.grammarAccent)
                         }
                     }
                 }
             }
 
             if !entry.writingChallenge.isEmpty {
-                LessonSectionView(title: "Writing Challenge") {
-                    Text(entry.writingChallenge).textSelection(.enabled)
+                LessonSectionView(title: "Writing Challenge", icon: "pencil.and.outline", accent: DesignColors.challengeAccent) {
+                    Text(entry.writingChallenge)
+                        .font(Typography.body)
+                        .foregroundStyle(DesignColors.textPrimary)
+                        .textSelection(.enabled)
                 }
             }
         } else {
             Text("Tap “Generate Lesson” to see vocabulary, grammar notes and a writing challenge.")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DesignColors.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }

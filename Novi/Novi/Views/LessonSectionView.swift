@@ -13,17 +13,38 @@ import SwiftUI
 /// challenge, …) shares the same look without duplicating layout code.
 struct LessonSectionView<Content: View>: View {
     let title: String
+    var icon: String?
+    var accent: Color = DesignColors.accentPrimary
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.headline)
+        VStack(alignment: .leading, spacing: Spacing.xSmall) {
+            HStack(spacing: 8) {
+                if let icon {
+                    Image(systemName: icon)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(accent)
+                }
+                Text(title)
+                    .font(Typography.bodyEmphasized)
+                    .foregroundStyle(DesignColors.textPrimary)
+            }
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+        .padding(Spacing.small)
+        .background(DesignColors.surfaceElevated, in: RoundedRectangle(cornerRadius: CornerRadius.small))
+        .overlay(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(accent.opacity(0.75))
+                .frame(width: 3)
+                .padding(.vertical, Spacing.small)
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: CornerRadius.small)
+                .stroke(DesignColors.separator, lineWidth: 1)
+        )
+        .shadow(color: DesignColors.shadow, radius: 8, x: 0, y: 3)
     }
 }
 
@@ -32,17 +53,20 @@ struct VocabularyRow: View {
     let item: VocabularyItem
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 3) {
             HStack {
                 Text(item.term).fontWeight(.semibold)
+                    .foregroundStyle(DesignColors.textPrimary)
                 Text("—")
-                Text(item.translation).foregroundStyle(.secondary)
+                    .foregroundStyle(DesignColors.textMuted)
+                Text(item.translation).foregroundStyle(DesignColors.textSecondary)
             }
+            .font(Typography.body)
             if let example = item.example {
                 Text(example)
-                    .font(.callout)
+                    .font(Typography.caption)
                     .italic()
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DesignColors.textSecondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
