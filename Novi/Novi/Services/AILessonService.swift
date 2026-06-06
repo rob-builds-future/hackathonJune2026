@@ -17,7 +17,7 @@ import Foundation
 ///
 /// Endpoint, model and target language are injectable so the same type works
 /// against OpenAI or any compatible self-hosted server.
-struct AILessonService: LessonGenerating {
+struct AILessonService: LessonGenerating, TitleGenerating {
 
     // MARK: Configuration
 
@@ -75,6 +75,47 @@ struct AILessonService: LessonGenerating {
         let content = try decodeChatContent(from: data)
         let dto = try decodeLesson(from: content)
         return dto.toLesson(fallbackSourceText: trimmed)
+    }
+
+    // MARK: - TitleGenerating
+
+    func generateTitle(from entry: String) async throws -> String {
+        let trimmed = entry.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw AILessonError.emptyInput }
+        guard !apiKey.isEmpty else { throw AILessonError.notConfigured }
+
+        var request = URLRequest(url: baseURL.appendingPathComponent("chat/completions"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONEncoder().encode(ChatRequest(
+            model: model,
+            temperature: 0.5,
+            responseFormat: nil,
+            messages: [
+                .init(role: "system", content: """
+                    You title journal entries. Reply with a single short title of \
+                    3 to 6 words. No quotes, no punctuation at the end, no commentary.
+                    """),
+                .init(role: "user", content: trimmed)
+            ]
+        ))
+
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            throw AILessonError.network(error)
+        }
+        guard let http = response as? HTTPURLResponse else { throw AILessonError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else {
+            let message = (try? JSONDecoder().decode(APIErrorResponse.self, from: data))?.error.message
+            throw AILessonError.server(status: http.statusCode, message: message)
+        }
+
+        let title = try decodeChatContent(from: data)
+            .trimmingCharacters(in: CharacterSet(charactersIn: " \n\t\"'"))
+        return String(title.prefix(60))
     }
 
     // MARK: - Request building
@@ -180,7 +221,7 @@ struct AILessonService: LessonGenerating {
 private struct ChatRequest: Encodable {
     let model: String
     let temperature: Double
-    let responseFormat: ResponseFormat
+    let responseFormat: ResponseFormat?
     let messages: [Message]
 
     struct ResponseFormat: Encodable { let type: String }

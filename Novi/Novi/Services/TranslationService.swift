@@ -7,6 +7,14 @@
 
 import Foundation
 
+/// The outcome of a translation request.
+struct TranslationResult {
+    /// The translated text.
+    let text: String
+    /// The language the backend detected for the source, if `source` was `"auto"`.
+    let detectedLanguageCode: String?
+}
+
 /// Translates text from one language into another.
 ///
 /// The UI depends only on this protocol. Today it is backed by the
@@ -18,6 +26,6 @@ protocol TranslationService {
     ///   - text: The text to translate.
     ///   - source: Source language code (e.g. `"de"`), or `"auto"` to detect.
     ///   - target: Target language code (e.g. `"en"`).
-    /// - Returns: The translated text.
-    func translate(_ text: String, from source: String, to target: String) async throws -> String
+    /// - Returns: The translated text plus any detected source language.
+    func translate(_ text: String, from source: String, to target: String) async throws -> TranslationResult
 }

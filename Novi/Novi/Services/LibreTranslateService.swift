@@ -21,9 +21,9 @@ struct LibreTranslateService: TranslationService {
 
     var session: URLSession = .shared
 
-    func translate(_ text: String, from source: String, to target: String) async throws -> String {
+    func translate(_ text: String, from source: String, to target: String) async throws -> TranslationResult {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "" }
+        guard !trimmed.isEmpty else { return TranslationResult(text: "", detectedLanguageCode: nil) }
 
         var request = URLRequest(url: baseURL.appendingPathComponent("translate"))
         request.httpMethod = "POST"
@@ -42,7 +42,11 @@ struct LibreTranslateService: TranslationService {
             throw TranslationError.server(status: http.statusCode, message: message)
         }
 
-        return try JSONDecoder().decode(TranslateResponse.self, from: data).translatedText
+        let decoded = try JSONDecoder().decode(TranslateResponse.self, from: data)
+        return TranslationResult(
+            text: decoded.translatedText,
+            detectedLanguageCode: decoded.detectedLanguage?.language
+        )
     }
 }
 
@@ -65,6 +69,13 @@ private struct TranslateRequest: Encodable {
 /// Successful response from `POST /translate`.
 private struct TranslateResponse: Decodable {
     let translatedText: String
+    /// Present when `source` was `"auto"`.
+    let detectedLanguage: DetectedLanguage?
+
+    struct DetectedLanguage: Decodable {
+        let language: String
+        let confidence: Double?
+    }
 }
 
 /// Error payload LibreTranslate returns on failure.
