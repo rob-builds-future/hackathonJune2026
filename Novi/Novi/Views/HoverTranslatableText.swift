@@ -3,19 +3,18 @@
 //  Novi
 //
 //  Renders text as individually hoverable words. Hovering a word shows its
-//  meaning in an info tooltip, using known vocabulary first and Apple's
-//  on-device Translation framework for everything else.
+//  meaning in a popover, using known vocabulary first and Novi's own
+//  LibreTranslate instance for everything else.
 //
 
 import SwiftUI
-import Translation
 
 /// A read-only text view whose words can be hovered to reveal their meaning.
 ///
 /// - `text` is shown to the user (in `wordsLanguage`).
-/// - Hovering a word shows its translation into `explanationLanguage`.
-/// - `glossary` provides instant, offline lookups (e.g. the lesson's vocabulary);
-///   anything missing is translated on-device via ``TranslationSession``.
+/// - Hovering a word translates it into `explanationLanguage` on demand via the
+///   `translationService` and caches the result.
+/// - `glossary` provides instant, offline lookups (e.g. the lesson's vocabulary).
 struct HoverTranslatableText: View {
     let text: String
     /// BCP-47 code of the language `text` is written in.
@@ -24,15 +23,18 @@ struct HoverTranslatableText: View {
     let explanationLanguage: String
     /// Instant lookups keyed by lowercased word.
     var glossary: [String: String] = [:]
+    /// Translation backend (Novi's own LibreTranslate by default).
+    var translationService = LibreTranslateService()
 
     @State private var cache: [String: String] = [:]
-    @State private var attempted: Set<String> = []
-    @State private var configuration: TranslationSession.Configuration?
+    @State private var failed: Set<String> = []
+    @State private var inFlight: Set<String> = []
 
     private var tokens: [TextToken] { TextToken.tokens(from: text) }
 
-    private var uniqueWords: [String] {
-        Array(Set(tokens.compactMap { $0.word?.lowercased() })).filter { !$0.isEmpty }
+    private var languagesValid: Bool {
+        !wordsLanguage.isEmpty && !explanationLanguage.isEmpty
+            && explanationLanguage != "auto" && wordsLanguage != explanationLanguage
     }
 
     var body: some View {
@@ -43,72 +45,43 @@ struct HoverTranslatableText: View {
                         word: word,
                         display: token.display,
                         meaning: meaning(for: word),
-                        isUnavailable: meaning(for: word) == nil && attempted.contains(word.lowercased())
+                        isUnavailable: failed.contains(word.lowercased()),
+                        onHover: { requestTranslation(word) }
                     )
                 } else {
                     Text(token.display)
                 }
             }
         }
-        .translationTask(configuration) { session in
-            await translatePending(using: session)
-        }
-        .onAppear { refreshConfiguration() }
-        .onChange(of: text) { refreshConfiguration() }
-        .onChange(of: wordsLanguage) { cache = [:]; attempted = []; refreshConfiguration() }
-        .onChange(of: explanationLanguage) { cache = [:]; attempted = []; refreshConfiguration() }
     }
-
-    // MARK: - Lookups
 
     private func meaning(for word: String) -> String? {
         let key = word.lowercased()
         return glossary[key] ?? cache[key]
     }
 
-    // MARK: - Translation
+    /// Translates a single word on demand and caches the result.
+    private func requestTranslation(_ word: String) {
+        let key = word.lowercased()
+        guard meaning(for: word) == nil, !inFlight.contains(key), !failed.contains(key) else { return }
+        guard languagesValid else { failed.insert(key); return }
 
-    private func refreshConfiguration() {
-        guard !uniqueWords.isEmpty,
-              !wordsLanguage.isEmpty, wordsLanguage != "auto",
-              !explanationLanguage.isEmpty, explanationLanguage != "auto",
-              wordsLanguage != explanationLanguage else { return }
+        inFlight.insert(key)
+        let service = translationService
+        let from = wordsLanguage
+        let to = explanationLanguage
 
-        if configuration == nil {
-            configuration = TranslationSession.Configuration(
-                source: Locale.Language(identifier: wordsLanguage),
-                target: Locale.Language(identifier: explanationLanguage)
-            )
-        } else {
-            configuration?.invalidate()
-        }
-    }
-
-    private func translatePending(using session: TranslationSession) async {
-        let pending = uniqueWords.filter { meaning(for: $0) == nil && !attempted.contains($0) }
-        guard !pending.isEmpty else { return }
-
-        // Warm up / ensure the language pair is ready once. If this fails the
-        // pair is unavailable — mark everything attempted so the UI shows
-        // "No translation available" instead of spinning forever.
-        do {
-            try await session.prepareTranslation()
-        } catch {
-            attempted.formUnion(pending)
-            return
-        }
-
-        // Translate word by word and publish each result immediately, so words
-        // light up as they finish instead of waiting for the whole batch.
-        for word in pending {
-            if Task.isCancelled { return }
-            do {
-                let response = try await session.translate(word)
-                cache[word] = response.targetText
-            } catch {
-                // Leave this word unavailable; keep going with the rest.
+        Task {
+            let result = try? await service.translate(key, from: from, to: to)
+            let translated = result?.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            await MainActor.run {
+                inFlight.remove(key)
+                if let translated, !translated.isEmpty {
+                    cache[key] = translated
+                } else {
+                    failed.insert(key)
+                }
             }
-            attempted.insert(word)
         }
     }
 }
@@ -123,6 +96,8 @@ private struct HoverWord: View {
     let meaning: String?
     /// True when translation was attempted but produced no result.
     let isUnavailable: Bool
+    /// Called when the pointer enters the word (triggers translation).
+    let onHover: () -> Void
 
     @State private var isHovered = false
 
@@ -133,7 +108,10 @@ private struct HoverWord: View {
                 isHovered ? Color.accentColor.opacity(0.20) : .clear,
                 in: RoundedRectangle(cornerRadius: 3)
             )
-            .onHover { isHovered = $0 }
+            .onHover { hovering in
+                isHovered = hovering
+                if hovering { onHover() }
+            }
             .popover(isPresented: $isHovered, arrowEdge: .bottom) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(word)
