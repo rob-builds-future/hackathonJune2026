@@ -361,10 +361,19 @@ private final class ClickableWrappingTextView: NSView {
 
         let containerOrigin = textView.textContainerOrigin
         let containerPoint = NSPoint(x: point.x - containerOrigin.x, y: point.y - containerOrigin.y)
-        let glyphIndex = layoutManager.glyphIndex(for: containerPoint, in: textContainer)
-        let characterIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
+        let glyphIndex = layoutManager.glyphIndex(
+            for: containerPoint,
+            in: textContainer,
+            fractionOfDistanceThroughGlyph: nil
+        )
+        var characterIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
         let nsString = textView.string as NSString
         guard characterIndex < nsString.length else { return nil }
+
+        if !Self.isWordCharacter(in: nsString, at: characterIndex) {
+            guard let nearby = Self.nearbyWordIndex(in: nsString, around: characterIndex) else { return nil }
+            characterIndex = nearby
+        }
 
         let wordRange = Self.wordRange(in: nsString, at: characterIndex)
         guard wordRange.length > 0 else { return nil }
@@ -372,32 +381,44 @@ private final class ClickableWrappingTextView: NSView {
         let glyphRange = layoutManager.glyphRange(forCharacterRange: wordRange, actualCharacterRange: nil)
         var rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
         rect = rect.insetBy(dx: -2, dy: -2)
-        guard rect.insetBy(dx: -4, dy: -4).contains(containerPoint) else { return nil }
+        guard rect.insetBy(dx: -10, dy: -8).contains(containerPoint) else { return nil }
         rect.origin.x += containerOrigin.x
         rect.origin.y += containerOrigin.y
 
         return (nsString.substring(with: wordRange), rect)
     }
 
-    private static func wordRange(in string: NSString, at index: Int) -> NSRange {
+    private static func nearbyWordIndex(in string: NSString, around index: Int) -> Int? {
+        for distance in 1...2 {
+            let previous = index - distance
+            if isWordCharacter(in: string, at: previous) { return previous }
+
+            let next = index + distance
+            if isWordCharacter(in: string, at: next) { return next }
+        }
+        return nil
+    }
+
+    private static func isWordCharacter(in string: NSString, at index: Int) -> Bool {
         let wordCharacters = CharacterSet.letters.union(.decimalDigits)
-        guard index < string.length,
-              let scalar = UnicodeScalar(string.character(at: index)),
-              wordCharacters.contains(scalar) else {
+        guard index >= 0,
+              index < string.length,
+              let scalar = UnicodeScalar(string.character(at: index)) else { return false }
+        return wordCharacters.contains(scalar)
+    }
+
+    private static func wordRange(in string: NSString, at index: Int) -> NSRange {
+        guard isWordCharacter(in: string, at: index) else {
             return NSRange(location: index, length: 0)
         }
 
         var start = index
-        while start > 0,
-              let scalar = UnicodeScalar(string.character(at: start - 1)),
-              wordCharacters.contains(scalar) {
+        while isWordCharacter(in: string, at: start - 1) {
             start -= 1
         }
 
         var end = index
-        while end < string.length,
-              let scalar = UnicodeScalar(string.character(at: end)),
-              wordCharacters.contains(scalar) {
+        while isWordCharacter(in: string, at: end) {
             end += 1
         }
 
